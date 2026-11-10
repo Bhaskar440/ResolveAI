@@ -64,9 +64,9 @@ def test_closed_dispute_denied(rules):
     r = evaluate(
         PolicyInput(
             reason_code="MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
-            amount=Decimal("10"),
+            amount=Decimal(10),
             confidence=0.9,
-            refundable_amount=Decimal("10"),
+            refundable_amount=Decimal(10),
             dispute_status="RESOLVED",
         ),
         rules,
@@ -79,7 +79,7 @@ def test_currency_mismatch_denied(rules):
     r = evaluate(
         PolicyInput(
             reason_code="MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
-            amount=Decimal("10"),
+            amount=Decimal(10),
             currency="EUR",
             merchant_currency="USD",
             confidence=0.9,
@@ -93,7 +93,7 @@ def test_no_refundable_balance_withholds_money_actions(rules):
     r = evaluate(
         PolicyInput(
             reason_code="MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED",
-            amount=Decimal("60"),
+            amount=Decimal(60),
             confidence=0.9,
             refundable_amount=Decimal("0.00"),
         ),
@@ -108,9 +108,9 @@ def test_unknown_confidence_is_not_autonomous(rules):
     r = evaluate(
         PolicyInput(
             reason_code="MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
-            amount=Decimal("10"),
+            amount=Decimal(10),
             confidence=None,
-            refundable_amount=Decimal("10"),
+            refundable_amount=Decimal(10),
         ),
         rules,
     )
@@ -136,9 +136,9 @@ def test_deadline_pressure_removes_offers(rules):
     r = evaluate(
         PolicyInput(
             reason_code="MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED",
-            amount=Decimal("40"),
+            amount=Decimal(40),
             confidence=0.9,
-            refundable_amount=Decimal("40"),
+            refundable_amount=Decimal(40),
             hours_to_deadline=2.0,
         ),
         rules,
@@ -150,9 +150,9 @@ def test_partial_band_for_snad(rules):
     r = evaluate(
         PolicyInput(
             reason_code="MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED",
-            amount=Decimal("100"),
+            amount=Decimal(100),
             confidence=0.9,
-            refundable_amount=Decimal("100"),
+            refundable_amount=Decimal(100),
         ),
         rules,
     )

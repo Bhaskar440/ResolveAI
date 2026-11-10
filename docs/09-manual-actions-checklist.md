@@ -71,10 +71,14 @@ exists, whether anything is deployed.
 | A-06 | Local git repo init + first commit (docs only) | **COMPLETED** | `git log` |
 | A-07 | Download `cloudflared.exe` to `tools/` + verify a quick tunnel (no account) | `NOT STARTED` |
 | A-08 | Monorepo scaffold, `docker-compose.yml` (Postgres), FastAPI app factory | **COMPLETED** | §7 V7–V9 |
-| A-09 | DB models (18 tables) + Alembic migrations + seed script with fixture data | **PARTIAL** — models + migrations done, seed pending | §7 V12 |
-| A-10 | PayPal adapter skeleton with `replay` mode + fixtures (works with **zero** credentials) | `NOT STARTED` (fixtures written) | `fixtures/disputes/demo_scenarios.json` |
-| A-11 | Policy engine + `rules.yaml` + unit tests (pure, no LLM) | **COMPLETED** — 11 tests green | §7 V10 |
-| A-12 | Next.js app shell (server-rendered status page, error boundary, Tailwind) | **COMPLETED** — AG Grid still pending (next milestone) | §7 V14–V17 |
+| A-09 | DB models (19 tables) + Alembic migrations + seed script with fixture data | **COMPLETED** | §7 V12, V25 |
+| A-10 | PayPal adapter: `replay` (fixtures, zero credentials) + `sandbox` (live REST) behind one Protocol | **COMPLETED** | `app/paypal/`, §7 V25–V26 |
+| A-11 | Policy engine + `rules.yaml` + unit tests (pure, no LLM) | **COMPLETED** — 19 tests green | §7 V10, V31 |
+| A-12 | Next.js dashboard: AG Grid infinite model, approvals, trace, honest mode badge | **COMPLETED** | §7 V29–V31 |
+| A-13 | LangGraph spine: Buyer ∥ Merchant → Resolution → policy gate → Payment, bounded 2 rounds | **COMPLETED** | §7 V26–V28 |
+| A-14 | Signed-plan executor with idempotent refunds + hash-chained audit log | **COMPLETED** | §7 V26–V27 |
+| A-15 | Approval workflow persisted in Postgres (survives restarts), approve/reject API | **COMPLETED** | §7 V27 |
+| A-16 | Webhooks: signature verification + delivery dedupe (live path gated to sandbox mode) | **COMPLETED (replay-safe)** | `app/api/v1/webhooks.py` |
 
 ---
 
@@ -383,5 +387,12 @@ authorize Git/hosting OAuth · record the pitch video · submit on Devpost · ap
 | V22 | Gemini key valid | `GET /v1beta/models` | OK: **200**, 50 models. `gemini-3.5-flash-lite` and `gemini-3.5-flash` both present. |
 | V23 | Gemini generation works | `POST /models/<id>:generateContent` | OK: `gemini-3.5-flash-lite` **200** → `OK` (6 tokens). `gemini-3.5-flash` **200** → `OK` (6 tokens with `thinkingBudget: 0`). `gemini-3.8-flash` / `gemini-flash-latest` returned **503 high demand**, `gemini-pro-latest` **429 quota** on this free-tier key — pinned to 3.5 family. |
 | V24 | Capability flags reflect reality | `GET /api/v1/system/status` + page HTML | OK: `paypal_credentials: true`, `agents: true`, `live_paypal: false` (mode is still `replay` — accurate). Page renders `verified` + `configured`. |
+| V25 | Replay ingestion is idempotent | `uv run python -m scripts.seed` twice | OK 2026-11-10: first run `0 -> 3` disputes; re-run leaves 3 rows (unique on merchant + `paypal_dispute_id`, orders, captures, message dedupe key). Fixtures PP-D-91001/2/3. |
+| V26 | Autonomous path (INR) | `POST /api/v1/disputes/{id}/run` (via `scripts.run_demo`) | OK: LangGraph fan-out Buyer + Merchant → Resolution → policy `allow` → signed plan → replay refund `REPLAY-RF-0613F0079945` **simulated=True**, dispute `RESOLVED`, $40.00, no human. One earlier run hit a real `503` on the fast model; the Buyer step is then labelled `fallback` in the trace (never presented as model output). |
+| V27 | Approval path (SNAD) | run, then `POST /api/v1/approvals/{id}/decide {"approve":true}` | OK: decision `REFUND_PARTIAL 70.00` (band 35.00–84.00) with `requires_approval=true`; approve executed one refund, dispute `RESOLVED`; metrics moved to `recovered:110.00, pending:0`. Re-approval returns `409` (idempotent). |
+| V28 | Denied / no-money path (UNAUTHORISED) | run PP-D-91003 | OK: `DEFEND`, amount `0.00`, fraud reason → human required, **no payment plan and no refund row**. |
+| V29 | Dashboard is real | fetch `http://localhost:3000/` server HTML | OK: contains live `$140.00` exposure, `$40.00` recovered, `PP-D-91002` in the pending-approval strip, policy caps read from `GET /api/v1/policy/rules`; no hardcoded demo numbers. |
+| V30 | Case file is auditable | fetch `/disputes/{id}` | OK: renders agent step timeline (LLM/fallback/policy/plan badges), typed transcript with evidence refs, matched policy rules and both envelope passes, and receipts marked **simulated (replay)**. |
+| V31 | Backend + frontend checks | `uv run pytest -q`, `npx tsc --noEmit`, `npm run build` | OK: **19 passed** (deterministic graph with LLM forced offline, signature tampering, idempotency key stability, replay receipt determinism, policy suite); 0 type errors; Next build compiles `/` and `/disputes/[id]`. |
 
 *Nothing in this file is marked COMPLETED until the corresponding check above actually passes.*

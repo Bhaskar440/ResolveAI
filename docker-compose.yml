@@ -28,6 +28,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://resolveai:resolveai@db:5432/resolveai
       APP_ENV: demo
       WEB_BASE_URL: http://localhost:3000
+      FIXTURES_DIR: /app/fixtures/disputes
     ports:
       - "8000:8000"
     volumes:
@@ -35,6 +36,7 @@ services:
       - ./apps/api/app:/app/app
       - ./apps/api/migrations:/app/migrations
       - ./apps/api/alembic.ini:/app/alembic.ini:ro
+      - ./fixtures:/app/fixtures:ro
     depends_on:
       db:
         condition: service_healthy

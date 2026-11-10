@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://resolveai:resolveai@localhost:55433/resolveai"
     db_echo: bool = False
 
+    # demo / fixtures
+    fixtures_dir: str = ""
+    demo_merchant_slug: str = "northwind"
+    demo_merchant_name: str = "Northwind Supply Co."
+
     # paypal
     paypal_mode: str = "replay"  # replay | sandbox | mock
     paypal_base_url: str = "https://api-m.sandbox.paypal.com"
@@ -69,6 +74,9 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model_fast: str = ""
     llm_model_reasoning: str = ""
+    llm_temperature: float = 0.0
+    llm_max_output_tokens: int = 900
+    llm_timeout_seconds: float = 45.0
 
     @property
     def cors_origin_list(self) -> list[str]:

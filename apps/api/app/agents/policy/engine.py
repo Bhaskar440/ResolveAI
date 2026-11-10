@@ -70,7 +70,7 @@ def load_rules(path: str | None = None) -> dict[str, Any]:
         return yaml.safe_load(fh)
 
 
-def _money(value: Decimal | float | int | None) -> Decimal:
+def _money(value: Decimal | float | None) -> Decimal:
     if value is None:
         return Decimal("0.00")
     try:
