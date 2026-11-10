@@ -14,6 +14,7 @@
 | [07-milestones-and-risks.md](07-milestones-and-risks.md) | M0–M5 plan with exit criteria, risk register, demo script |
 | [08-environment-variables.md](08-environment-variables.md) | Full env var list with secret/optional flags |
 | [09-manual-actions-checklist.md](09-manual-actions-checklist.md) | Every action that needs you: accounts, credentials, approvals, status board, verification log |
+| [10-hackathon-compliance-and-48h-plan.md](10-hackathon-compliance-and-48h-plan.md) | **Binding rules, pass/fail requirements, hour-by-hour plan for the Nov 13 deadline** |
 
 ---
 

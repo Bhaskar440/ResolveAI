@@ -2,6 +2,10 @@
 
 > Running document. I update the status board after every action and after every verification.
 > **Statuses: `NOT STARTED` · `WAITING FOR ME` · `COMPLETED`** ("ME" = you, the human).
+>
+> ⚠️ **DEADLINE: Fri 2026-11-13, 01:30 IST** (rules: Thu Nov 12, 12:00 pm PT). Solo build, ~2.4 days.
+> Binding constraints and the hour-by-hour plan are in [10-hackathon-compliance-and-48h-plan.md](10-hackathon-compliance-and-48h-plan.md).
+> Everything below is re-prioritised for that deadline.
 
 ---
 
@@ -36,25 +40,26 @@ exists, whether anything is deployed.
 
 | ID | Task | Owner | Status | Blocks |
 |---|---|---|---|---|
-| **M-01** | Read the Devpost rules; capture deadline, deliverables, judging criteria, eligibility | You | **WAITING FOR ME** | Scope + M-12 |
+| **M-14** | Click **"Join Hackathon"** on Devpost (registration) | You | **WAITING FOR ME** | C14 — you cannot submit otherwise |
 | **M-02** | PayPal Developer app with **Disputes** feature → Client ID + Secret | You | **WAITING FOR ME** | Everything PayPal |
-| **M-03** | Confirm sandbox business + personal (buyer) accounts and their logins | You | **WAITING FOR ME** | Dispute filing, live demo |
 | **M-04** | LLM API key (Gemini **or** OpenAI) | You | **WAITING FOR ME** | All agent work |
-| **M-05** | GitHub repo (private) + one-time push authorization | You | **WAITING FOR ME** | Delivery, Devpost repo link |
-| **M-06** | Approve autonomy numbers + the 3 demo scenarios | You | **WAITING FOR ME** | Policy rules (M2) |
+| **M-05** | **Public** GitHub repo + MIT license in About + one-time push auth | You | **WAITING FOR ME** | C3, C4 — pass/fail rule |
+| **M-03** | Confirm sandbox business + personal (buyer) accounts and their logins | You | **WAITING FOR ME** | Dispute filing, live demo |
+| **M-06** | Approve autonomy numbers + the 3 demo scenarios | You | **WAITING FOR ME** | Policy rules |
+| **M-13** | YouTube account ready for a **public** upload | You | **WAITING FOR ME** | C7 — video is 20% of score |
 
 ### 1b. Needed later (not blocking build)
 
 | ID | Task | Owner | Status | When |
 |---|---|---|---|---|
-| **M-07** | File 3 real sandbox disputes via Resolution Center | You | **WAITING FOR ME** (only after I seed transactions) | Before live demo |
+| **M-07** | File 3 real sandbox disputes via Resolution Center | You | **WAITING FOR ME** (after I seed transactions, target Wed) | Live demo |
 | **M-08** | Check/fund sandbox balances (avoid negative balance) | You | **WAITING FOR ME** | 24 h before demo |
-| **M-09** | Hosting accounts (Vercel + Render + Neon) — **only if we deploy** | You | **WAITING FOR ME** (decision) | After M4 |
+| **M-09** | ~~Hosting accounts~~ **DROPPED** — rules allow runnable setup instructions instead of hosting | — | `NOT STARTED` (not required) | — |
 | **M-10** | **Conditional:** request Disputes API access if I get HTTP 403 | You | `NOT STARTED` (only if triggered) | On my report |
-| **M-11** | Optional: PayPal Agent Toolkit / MCP authorization — **only if your track requires it** | You | `NOT STARTED` | If confirmed |
-| **M-12** | Devpost final submission (your account) | You | `NOT STARTED` | Last 2 h |
+| **M-11** | **Optional:** PayPal Agent Toolkit / MCP — not required by the rules; skip unless time remains | You | `NOT STARTED` | Bonus only |
+| **M-12** | Devpost text + video URL + repo URL submission | You | `NOT STARTED` | Last 3 h |
 
-### 1c. Mine — completed
+### 1c. Mine - build status
 
 | ID | Task | Status | Evidence |
 |---|---|---|---|
@@ -64,16 +69,11 @@ exists, whether anything is deployed.
 | A-04 | Env-secret safety: `.gitignore` + `.env.example` (no secrets committed) | **COMPLETED** | `.gitignore`, `.env.example` |
 | A-05 | Start Docker engine (was down) | **COMPLETED** | `docker info` → `server=29.5.3` |
 | A-06 | Local git repo init + first commit (docs only) | **COMPLETED** | `git log` |
-
-### 1d. Mine — queued, no dependency on you
-
-| ID | Task | Status |
-|---|---|---|
 | A-07 | Download `cloudflared.exe` to `tools/` + verify a quick tunnel (no account) | `NOT STARTED` |
-| A-08 | Monorepo scaffold, `docker-compose.yml` (Postgres), FastAPI app factory, Alembic baseline | `NOT STARTED` |
-| A-09 | DB models/migrations per doc 02 + seed script with fixture data | `NOT STARTED` |
-| A-10 | PayPal adapter skeleton with `replay` mode + fixtures (works with **zero** credentials) | `NOT STARTED` |
-| A-11 | Policy engine + `rules.yaml` + unit tests (pure, no LLM) | `NOT STARTED` |
+| A-08 | Monorepo scaffold, `docker-compose.yml` (Postgres), FastAPI app factory | **COMPLETED** | §7 V7–V9 |
+| A-09 | DB models (18 tables) + dev auto-create + seed script with fixture data | **PARTIAL** — models done, seed pending | §7 V8 |
+| A-10 | PayPal adapter skeleton with `replay` mode + fixtures (works with **zero** credentials) | `NOT STARTED` (fixtures written) | `fixtures/disputes/demo_scenarios.json` |
+| A-11 | Policy engine + `rules.yaml` + unit tests (pure, no LLM) | **COMPLETED** — 11 tests green | §7 V10 |
 | A-12 | Next.js shell + AG Grid with replay data | `NOT STARTED` |
 
 ---
@@ -98,7 +98,11 @@ Copy-Item .env.example .env.local      # then edit .env.local
 
 ## 3. Task detail
 
-### M-01 — Read the hackathon rules (10 min, no credentials)
+### M-01 — Read the hackathon rules ✅ **COMPLETED** (2026-11-10)
+
+Captured in [10-hackathon-compliance-and-48h-plan.md](10-hackathon-compliance-and-48h-plan.md): deadline
+**2026-11-13 01:30 IST**, public repo + OSI license mandatory, video <3 min on YouTube, runnable demo or
+hosted URL, 5 equally weighted judging criteria, India eligible, solo OK, no sponsor tool required.
 
 **What:** Read the official Devpost page and capture the rules that constrain the build.
 **Why:** Deadline, required tech, judging weights and "is a public repo required" change the plan
@@ -361,5 +365,10 @@ authorize Git/hosting OAuth · record the pitch video · submit on Devpost · ap
 | V4 | `.env.local` cannot be committed | `git check-ignore -v .env.local` | ✅ ignored by `.gitignore:3`; `.env.example` correctly **not** ignored (re-checked after you create the file) |
 | V5 | Disputes API enabled on your app | authenticated `GET /v1/customer/disputes` | ⏳ blocked on M-02 |
 | V6 | LLM key valid | `GET /v1beta/models` + 8-token call | ⏳ blocked on M-04 |
+| V7 | Postgres reachable for the app | `docker compose up -d db` + `asyncpg.connect` | OK: PostgreSQL 16.14, user `resolveai`. **Fixed a real conflict**: a host Postgres (PID 7016) already owned port 5432, so the container is published on **55433** (updated in `docker-compose.yml`, `.env.example`, `.env.local`). |
+| V8 | Schema creates cleanly | app startup (`create_all`) | OK: **18 tables** in schema `public`. |
+| V9 | API boots | `GET /health/ready`, `GET /api/v1/meta` | OK: `{"status":"ok","db":true,"mode":"replay"}`; meta honestly reports `live_paypal:false, agents:false` (no credentials yet). |
+| V10 | Policy engine correct | `uv run pytest -q` | OK: **11 passed** (caps, fraud reasons, refundable clamp, currency deny, deadline pressure, digest stability). |
+| V11 | Local secrets generated safely | read `.env.local` + `git check-ignore` | OK: 4 keys x 64 hex, unique, non-zero; file ignored by git. |
 
 *Nothing in this file is marked COMPLETED until the corresponding check above actually passes.*

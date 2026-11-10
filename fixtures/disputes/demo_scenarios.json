@@ -1,0 +1,140 @@
+{
+  "version": "2026.11.1",
+  "note": "Replay-mode fixtures. Shapes follow PayPal Disputes v1 / Orders v2. Amounts and IDs are synthetic; nothing here is a real PayPal dispute.",
+  "disputes": [
+    {
+      "paypal_dispute_id": "PP-D-91001",
+      "paypal_case_number": "PP-D-91001",
+      "scenario": "INR_AUTO_RESOLVE",
+      "expected_outcome": "REFUND_FULL within autonomous cap",
+      "reason_code": "MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
+      "reason_detail": "Buyer says the parcel never arrived.",
+      "status": "OPEN",
+      "paypal_status": "WAITING_FOR_SELLER_RESPONSE",
+      "lifecycle_stage": "INQUIRY",
+      "amount": 40.0,
+      "currency": "USD",
+      "response_due_by": "2026-11-12T18:00:00Z",
+      "buyer": { "label": "Buyer #3f2a", "email_hash": "a1b2c3d4e5f6" },
+      "order": {
+        "paypal_order_id": "ORDER-INR-40",
+        "amount": 40.0,
+        "currency": "USD",
+        "item_title": "Ceramic pour-over set",
+        "created_at_paypal": "2026-11-02T09:12:00Z"
+      },
+      "capture": {
+        "paypal_capture_id": "CAP-INR-40",
+        "status": "COMPLETED",
+        "amount": 40.0,
+        "currency": "USD",
+        "seller_protection_status": "ELIGIBLE",
+        "refundable_amount": 40.0
+      },
+      "tracking": { "carrier": "UPS", "number": "1Z999AA10123456784", "status": "NO_TRACKING" },
+      "messages": [
+        {
+          "direction": "inbound",
+          "author_type": "buyer",
+          "sent_at": "2026-11-09T14:02:00Z",
+          "body": "I ordered the pour-over set on Nov 2 and it never showed up. The tracking link you sent just says 'label created'. Please refund me."
+        }
+      ]
+    },
+    {
+      "paypal_dispute_id": "PP-D-91002",
+      "paypal_case_number": "PP-D-91002",
+      "scenario": "SNAD_PARTIAL_APPROVAL",
+      "expected_outcome": "OFFER_PARTIAL, requires human approval (amount > cap / medium confidence)",
+      "reason_code": "MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED",
+      "reason_detail": "Item arrived with a cracked lid; buyer wants a full refund.",
+      "status": "OPEN",
+      "paypal_status": "WAITING_FOR_SELLER_RESPONSE",
+      "lifecycle_stage": "INQUIRY",
+      "amount": 140.0,
+      "currency": "USD",
+      "response_due_by": "2026-11-13T20:00:00Z",
+      "buyer": { "label": "Buyer #77bc", "email_hash": "b2c3d4e5f607" },
+      "order": {
+        "paypal_order_id": "ORDER-SNAD-140",
+        "amount": 140.0,
+        "currency": "USD",
+        "item_title": "Stoneware dinner set (12 pc)",
+        "created_at_paypal": "2026-10-28T16:40:00Z"
+      },
+      "capture": {
+        "paypal_capture_id": "CAP-SNAD-140",
+        "status": "COMPLETED",
+        "amount": 140.0,
+        "currency": "USD",
+        "seller_protection_status": "NOT_ELIGIBLE",
+        "refundable_amount": 140.0
+      },
+      "tracking": { "carrier": "FedEx", "number": "770123456789", "status": "DELIVERED" },
+      "messages": [
+        {
+          "direction": "inbound",
+          "author_type": "buyer",
+          "sent_at": "2026-11-08T10:15:00Z",
+          "body": "Two of the twelve plates arrived cracked and the lid is chipped. I want the whole set refunded, I'm not paying 140 dollars for damaged goods."
+        },
+        {
+          "direction": "outbound",
+          "author_type": "merchant",
+          "sent_at": "2026-11-08T15:30:00Z",
+          "body": "Sorry about that. We can send replacement plates and a new lid, or offer a partial refund of 50 dollars."
+        },
+        {
+          "direction": "inbound",
+          "author_type": "buyer",
+          "sent_at": "2026-11-09T08:05:00Z",
+          "body": "I don't want replacements, they'll break again. I want a refund."
+        }
+      ]
+    },
+    {
+      "paypal_dispute_id": "PP-D-91003",
+      "paypal_case_number": "PP-D-91003",
+      "scenario": "UNAUTHORISED_ESCALATE",
+      "expected_outcome": "Never auto-refunded: fraud reason forces human, allowed actions DEFEND/ESCALATE only",
+      "reason_code": "UNAUTHORISED",
+      "reason_detail": "Cardholder claims the payment was not authorised.",
+      "status": "OPEN",
+      "paypal_status": "WAITING_FOR_SELLER_RESPONSE",
+      "lifecycle_stage": "CHARGEBACK",
+      "amount": 260.0,
+      "currency": "USD",
+      "response_due_by": "2026-11-14T12:00:00Z",
+      "buyer": { "label": "Buyer #91de", "email_hash": "c3d4e5f60718" },
+      "order": {
+        "paypal_order_id": "ORDER-UNAUTH-260",
+        "amount": 260.0,
+        "currency": "USD",
+        "item_title": "Mechanical keyboard (custom)",
+        "created_at_paypal": "2026-10-21T11:05:00Z"
+      },
+      "capture": {
+        "paypal_capture_id": "CAP-UNAUTH-260",
+        "status": "COMPLETED",
+        "amount": 260.0,
+        "currency": "USD",
+        "seller_protection_status": "UNKNOWN",
+        "refundable_amount": 260.0
+      },
+      "tracking": { "carrier": "USPS", "number": "9400111899223197428490", "status": "DELIVERED" },
+      "risk_signals": [
+        "Buyer account created 2 days before purchase",
+        "Shipping address differs from billing country",
+        "Device fingerprint matches a prior chargeback"
+      ],
+      "messages": [
+        {
+          "direction": "inbound",
+          "author_type": "buyer",
+          "sent_at": "2026-11-09T19:44:00Z",
+          "body": "I did not make this purchase. Please reverse it."
+        }
+      ]
+    }
+  ]
+}

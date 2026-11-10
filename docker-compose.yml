@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: resolveai-db
+    environment:
+      POSTGRES_USER: resolveai
+      POSTGRES_PASSWORD: resolveai
+      POSTGRES_DB: resolveai
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    ports:
+      # 5432 is taken by a host PostgreSQL on this machine — use a dedicated port.
+      - "55433:5432"
+    volumes:
+      - resolveai_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U resolveai -d resolveai"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  resolveai_pgdata:

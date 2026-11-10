@@ -1,0 +1,65 @@
+# Deterministic dispute policy — v1
+# Loaded by engine.py. Every threshold here is a *business* decision, not a model output.
+# Changing this file changes what the AI is allowed to do without a human.
+
+version: "2026.11.1"
+
+thresholds:
+  auto_resolve_cap: 50.00        # max refund the agent may execute alone
+  auto_offer_cap: 100.00         # max partial offer the agent may propose alone
+  hard_cap: 250.00               # above this: always human, regardless of confidence
+  auto_approve_confidence: 0.80  # below: human approval
+  escalate_confidence: 0.55      # below: no automatic action at all
+  deadline_pressure_hours: 6     # under this, no slow-moving actions (offers)
+
+fraud_reasons:
+  - UNAUTHORISED
+  - DUPLICATE_TRANSACTION
+
+# Actions that are structurally possible for a reason code.
+# The Resolution agent may only choose from this set; the gate clamps anything else.
+actions_by_reason:
+  MERCHANDISE_OR_SERVICE_NOT_RECEIVED:
+    - REFUND_FULL
+    - REFUND_PARTIAL
+    - DEFEND
+    - ESCALATE
+  MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED:
+    - REFUND_FULL
+    - REFUND_PARTIAL
+    - OFFER_PARTIAL
+    - DEFEND
+    - ESCALATE
+  UNAUTHORISED:
+    - DEFEND
+    - ESCALATE
+  DUPLICATE_TRANSACTION:
+    - REFUND_FULL
+    - DEFEND
+    - ESCALATE
+  CREDIT_NOT_PROCESSED:
+    - REFUND_FULL
+    - DEFEND
+  INCORRECT_AMOUNT:
+    - REFUND_PARTIAL
+    - REFUND_FULL
+  CANCELED_RECURRING_BILLING:
+    - REFUND_FULL
+    - DEFEND
+  default:
+    - REFUND_PARTIAL
+    - DEFEND
+    - ESCALATE
+
+# Actions that consume money (subject to caps + refundable balance)
+money_actions:
+  - REFUND_FULL
+  - REFUND_PARTIAL
+  - OFFER_PARTIAL
+  - ACCEPT_CLAIM
+
+# Partial-refund admissible band, as a fraction of the disputed amount
+partial_bands:
+  MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED: [0.25, 0.60]
+  MERCHANDISE_OR_SERVICE_NOT_RECEIVED: [0.25, 1.00]
+  default: [0.25, 0.50]
