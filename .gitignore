@@ -1,0 +1,54 @@
+# ---- Secrets (only the example file is allowed) ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials.json
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# ---- Node / Next.js ----
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+
+# ---- Local runtime data ----
+var/
+var/evidence/
+tools/cloudflared*.exe
+tools/ngrok*.exe
+*.sqlite3
+*.db
+docker/volumes/
+
+# ---- Logs & OS ----
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Editors ----
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# ---- Recorded live-paypal payloads that may contain PII ----
+fixtures/raw_private/
