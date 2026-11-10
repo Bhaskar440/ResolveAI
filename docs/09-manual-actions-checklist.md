@@ -358,7 +358,7 @@ authorize Git/hosting OAuth · record the pitch video · submit on Devpost · ap
 | V1 | Docker engine usable | `docker info --format` | ✅ `server=29.5.3` (after I started Docker Desktop) |
 | V2 | PayPal API reachable from this machine | `GET /v1/oauth2/token` unauthenticated | ✅ HTTP 401 (expected) |
 | V3 | Python deps installable | `uv pip compile fastapi` | ✅ resolved 8 packages |
-| V4 | `.env.local` cannot be committed | `git check-ignore -v` | ⏳ pending you creating the file |
+| V4 | `.env.local` cannot be committed | `git check-ignore -v .env.local` | ✅ ignored by `.gitignore:3`; `.env.example` correctly **not** ignored (re-checked after you create the file) |
 | V5 | Disputes API enabled on your app | authenticated `GET /v1/customer/disputes` | ⏳ blocked on M-02 |
 | V6 | LLM key valid | `GET /v1beta/models` + 8-token call | ⏳ blocked on M-04 |
 
