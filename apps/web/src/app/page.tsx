@@ -200,8 +200,8 @@ export default async function Home() {
               <ul className="mt-4 space-y-3 text-xs">
                 <li className="flex items-center justify-between">
                   <span className="text-slate-400">PayPal sandbox credentials</span>
-                  <Badge tone={status.data.capabilities.live_paypal ? "good" : "warn"}>
-                    {status.data.capabilities.live_paypal ? "configured" : "not configured"}
+                  <Badge tone={status.data.capabilities.paypal_credentials ? "good" : "warn"}>
+                    {status.data.capabilities.paypal_credentials ? "verified" : "not configured"}
                   </Badge>
                 </li>
                 <li className="flex items-center justify-between">
@@ -211,13 +211,15 @@ export default async function Home() {
                   </Badge>
                 </li>
                 <li className="flex items-center justify-between">
-                  <span className="text-slate-400">Replay fixtures</span>
-                  <Badge tone="good">available</Badge>
+                  <span className="text-slate-400">Execution mode</span>
+                  <Badge tone={status.data.mode === "sandbox" ? "good" : "warn"}>
+                    {status.data.mode}
+                  </Badge>
                 </li>
               </ul>
               <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] leading-relaxed text-slate-500">
-                Capability flags are computed from the environment on each request. Today they are
-                intentionally false — no PayPal key or model key has been provided yet.
+                Flags are computed from the environment on each request. Credentials are only marked
+                verified once an OAuth token was actually issued in the sandbox.
               </p>
             </div>
           </section>

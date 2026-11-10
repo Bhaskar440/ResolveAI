@@ -14,7 +14,12 @@ export type SystemStatus = {
   };
   counts: { disputes: number; runs: number; refunds: number };
   schema_tables: number;
-  capabilities: { live_paypal: boolean; agents: boolean; replay: boolean };
+  capabilities: {
+    paypal_credentials: boolean;
+    live_paypal: boolean;
+    agents: boolean;
+    replay: boolean;
+  };
   request_id: string;
 };
 

@@ -30,6 +30,11 @@ services:
       WEB_BASE_URL: http://localhost:3000
     ports:
       - "8000:8000"
+    volumes:
+      # dev ergonomics: edit code, `docker compose restart api` — no rebuild
+      - ./apps/api/app:/app/app
+      - ./apps/api/migrations:/app/migrations
+      - ./apps/api/alembic.ini:/app/alembic.ini:ro
     depends_on:
       db:
         condition: service_healthy
@@ -55,6 +60,11 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
       - "3000:3000"
+    volumes:
+      # dev server reads source from the host; node_modules stays in the image
+      - ./apps/web:/app
+      - /app/node_modules
+      - /app/.next
     depends_on:
       api:
         condition: service_healthy

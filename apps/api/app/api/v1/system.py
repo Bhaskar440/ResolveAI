@@ -67,6 +67,7 @@ async def system_status(session: SessionDep) -> SystemStatus:
         counts=counts,
         schema_tables=int(tables),
         capabilities={
+            "paypal_credentials": settings.paypal_configured,
             "live_paypal": settings.paypal_configured and settings.paypal_mode == "sandbox",
             "agents": settings.llm_configured,
             "replay": True,

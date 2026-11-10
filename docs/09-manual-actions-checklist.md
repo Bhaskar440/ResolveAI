@@ -41,8 +41,8 @@ exists, whether anything is deployed.
 | ID | Task | Owner | Status | Blocks |
 |---|---|---|---|---|
 | **M-14** | Click **"Join Hackathon"** on Devpost (registration) | You | **WAITING FOR ME** | C14 — you cannot submit otherwise |
-| **M-02** | PayPal Developer app with **Disputes** feature → Client ID + Secret | You | **WAITING FOR ME** | Everything PayPal |
-| **M-04** | LLM API key (Gemini **or** OpenAI) | You | **WAITING FOR ME** | All agent work |
+| **M-02** | PayPal Developer app with **Disputes** feature — Client ID + Secret | You | **COMPLETED** 2026-11-10 — OAuth 200 + Disputes API 200 (§7 V19–V20) | Everything PayPal |
+| **M-04** | LLM API key (Gemini **or** OpenAI) | You | **COMPLETED** 2026-11-10 — Gemini key valid, generation returns `OK` (§7 V22–V23) | All agent work |
 | **M-05** | **Public** GitHub repo + MIT license in About + one-time push auth | You | **WAITING FOR ME** | C3, C4 — pass/fail rule |
 | **M-03** | Confirm sandbox business + personal (buyer) accounts and their logins | You | **WAITING FOR ME** | Dispute filing, live demo |
 | **M-06** | Approve autonomy numbers + the 3 demo scenarios | You | **WAITING FOR ME** | Policy rules |
@@ -55,7 +55,7 @@ exists, whether anything is deployed.
 | **M-07** | File 3 real sandbox disputes via Resolution Center | You | **WAITING FOR ME** (after I seed transactions, target Wed) | Live demo |
 | **M-08** | Check/fund sandbox balances (avoid negative balance) | You | **WAITING FOR ME** | 24 h before demo |
 | **M-09** | ~~Hosting accounts~~ **DROPPED** — rules allow runnable setup instructions instead of hosting | — | `NOT STARTED` (not required) | — |
-| **M-10** | **Conditional:** request Disputes API access if I get HTTP 403 | You | `NOT STARTED` (only if triggered) | On my report |
+| **M-10** | **Conditional:** request Disputes API access if I get HTTP 403 | You | `NOT TRIGGERED` — Disputes API returned 200 (§7 V20) | On my report |
 | **M-11** | **Optional:** PayPal Agent Toolkit / MCP — not required by the rules; skip unless time remains | You | `NOT STARTED` | Bonus only |
 | **M-12** | Devpost text + video URL + repo URL submission | You | `NOT STARTED` | Last 3 h |
 
@@ -363,8 +363,8 @@ authorize Git/hosting OAuth · record the pitch video · submit on Devpost · ap
 | V2 | PayPal API reachable from this machine | `GET /v1/oauth2/token` unauthenticated | ✅ HTTP 401 (expected) |
 | V3 | Python deps installable | `uv pip compile fastapi` | ✅ resolved 8 packages |
 | V4 | `.env.local` cannot be committed | `git check-ignore -v .env.local` | ✅ ignored by `.gitignore:3`; `.env.example` correctly **not** ignored (re-checked after you create the file) |
-| V5 | Disputes API enabled on your app | authenticated `GET /v1/customer/disputes` | ⏳ blocked on M-02 |
-| V6 | LLM key valid | `GET /v1beta/models` + 8-token call | ⏳ blocked on M-04 |
+| V5 | Disputes API enabled on your app | authenticated `GET /v1/customer/disputes` | OK 2026-11-10: **200**, `items: []` (0 disputes filed yet). Note: `dispute_state=OPEN` is rejected with `INPUT_VALUE_NOT_SUPPORTED` — the adapter will filter client-side. |
+| V6 | LLM key valid | `GET /v1beta/models` + real generation call | OK 2026-11-10: models **200** (50 available), `gemini-3.5-flash-lite` generation **200** → `OK`. |
 | V7 | Postgres reachable for the app | `docker compose up -d db` + `asyncpg.connect` | OK: PostgreSQL 16.14, user `resolveai`. **Fixed a real conflict**: a host Postgres (PID 7016) already owned port 5432, so the container is published on **55433** (updated in `docker-compose.yml`, `.env.example`, `.env.local`). |
 | V8 | Schema creates cleanly | app startup (`create_all`) | OK: **18 tables** in schema `public`. |
 | V9 | API boots | `GET /health/ready`, `GET /api/v1/meta` | OK: `{"status":"ok","db":true,"mode":"replay"}`; meta honestly reports `live_paypal:false, agents:false` (no credentials yet). |
@@ -377,5 +377,11 @@ authorize Git/hosting OAuth · record the pitch video · submit on Devpost · ap
 | V16 | Honest failure path | page fetched with the API stopped | OK: rendered `connection failed` + `Cannot reach http://localhost:8000/...`; no fabricated numbers. |
 | V17 | Full compose stack | `docker compose up -d`, then fetch `:3000` | OK: `db` healthy, `api` healthy, `web` up; containerized page also shows `19 tables` and the live counts. |
 | V18 | Container env handling | rebuild after config change | Fixed: `ROOT_DIR = parents[4]` crashed inside the image (`/app/app/core/config.py`). Replaced with upward `.env` discovery; container now starts with env-only config. A later cosmetic `/health` alias was reverted so the running image matches `main`. |
+| V19 | PayPal OAuth (sandbox) | `POST /v1/oauth2/token` with client credentials | OK: **200**, `token_type: Bearer`, `expires_in: 31680`, app id returned. No secret echoed. |
+| V20 | Disputes API reachable with the app's scopes | `GET /v1/customer/disputes?page_size=10` | OK: **200**, `items: []`. An invalid state filter returns `400 INVALID_REQUEST` (field `dispute_state`), so the filter is unsupported for this app — adapter must filter client-side. **M-10 not triggered.** |
+| V21 | Payments scope present | `GET /v2/payments/captures/0NONEXISTENT` | OK: **404 `RESOURCE_NOT_FOUND`** — authenticated and scoped (a missing scope returns 403). Read-only probe. |
+| V22 | Gemini key valid | `GET /v1beta/models` | OK: **200**, 50 models. `gemini-3.5-flash-lite` and `gemini-3.5-flash` both present. |
+| V23 | Gemini generation works | `POST /models/<id>:generateContent` | OK: `gemini-3.5-flash-lite` **200** → `OK` (6 tokens). `gemini-3.5-flash` **200** → `OK` (6 tokens with `thinkingBudget: 0`). `gemini-3.8-flash` / `gemini-flash-latest` returned **503 high demand**, `gemini-pro-latest` **429 quota** on this free-tier key — pinned to 3.5 family. |
+| V24 | Capability flags reflect reality | `GET /api/v1/system/status` + page HTML | OK: `paypal_credentials: true`, `agents: true`, `live_paypal: false` (mode is still `replay` — accurate). Page renders `verified` + `configured`. |
 
 *Nothing in this file is marked COMPLETED until the corresponding check above actually passes.*

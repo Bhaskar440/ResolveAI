@@ -79,8 +79,18 @@ curl http://localhost:8000/api/v1/disputes
 ```
 
 The status payload reports the measured DB latency, schema table count, row counts and the
-environment capability flags (`live_paypal`, `agents`). Those flags are `false` until credentials
-are supplied — the app never reports a capability it does not have.
+environment capability flags (`paypal_credentials`, `live_paypal`, `agents`). Flags are computed from
+the environment on every request; `live_paypal` only turns true when `PAYPAL_MODE=sandbox`, so the
+replay-first default never overstates what is live.
+
+Verify credentials without exposing them:
+
+```bash
+cd apps/api && uv run python -m scripts.verify_credentials
+```
+
+It prints masked fingerprints only (length + SHA-256 prefix), the OAuth result, the Disputes API
+response, and a real model generation call.
 
 ## Layout
 
