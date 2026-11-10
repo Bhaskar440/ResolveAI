@@ -149,10 +149,14 @@ class SandboxAdapter:
                 err = res.json()
             except Exception:
                 err = {"name": "HTTP_ERROR", "message": res.text[:300]}
+            details = err.get("details")
+            message = str(err.get("message") or res.text[:300])
+            if details:
+                message = f"{message} | details={details}"
             raise PayPalError(
                 res.status_code,
                 str(err.get("name") or "HTTP_ERROR"),
-                str(err.get("message") or res.text[:300]),
+                message,
                 err.get("debug_id"),
             )
         return res.json() if res.content else {}
@@ -160,13 +164,14 @@ class SandboxAdapter:
     async def list_disputes(self) -> list[NormalizedDispute]:
         items: list[dict[str, Any]] = []
         page = 1
-        while page <= 5:
+        page_size = 50
+        while page <= 10:
             body = await self._request(
-                "GET", f"/v1/customer/disputes?page_size=100&page={page}"
+                "GET", f"/v1/customer/disputes?page_size={page_size}&page={page}"
             )
             batch = body.get("items") or []
             items.extend(batch)
-            if len(batch) < 100:
+            if len(batch) < page_size:
                 break
             page += 1
         return [normalize_dispute(i) for i in items]

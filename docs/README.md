@@ -1,6 +1,8 @@
-# ResolveAI — Architecture & Design Set
+# ResolveAI - Architecture & Design Set
 
-**Status:** DRAFT v0.1 — awaiting approval. No application code written yet.
+**Status:** IMPLEMENTED in replay mode, verified end-to-end 2026-11-10 (see
+[09](09-manual-actions-checklist.md) V25-V31). Live sandbox execution is the remaining segment and
+depends on the manual steps M-03 / M-07 / M-08.
 **Scope:** PayPal AI Hackathon MVP. Autonomous dispute resolution with a human approval gate.
 
 | Doc | Contents |
@@ -15,6 +17,7 @@
 | [08-environment-variables.md](08-environment-variables.md) | Full env var list with secret/optional flags |
 | [09-manual-actions-checklist.md](09-manual-actions-checklist.md) | Every action that needs you: accounts, credentials, approvals, status board, verification log |
 | [10-hackathon-compliance-and-48h-plan.md](10-hackathon-compliance-and-48h-plan.md) | **Binding rules, pass/fail requirements, hour-by-hour plan for the Nov 13 deadline** |
+| [11-demo-script.md](11-demo-script.md) | **Recording storyboard (<3 min), pre-record checklist, YouTube upload steps, claims checklist** |
 
 ---
 
@@ -37,11 +40,11 @@ AG Grid dashboard is the merchant control tower.
 |---|---|---|---|
 | D1 | **Agents never call PayPal write endpoints directly.** They emit `ProposedAction` objects; a policy gate + executor performs them. | Removes the "LLM refunded $4,000" failure mode entirely; makes actions testable without an LLM. | No |
 | D2 | **Deterministic policy engine first, LLM second.** Rules decide eligibility/envelope; the LLM reasons, gathers evidence, and writes rationale. | Judges will probe "is this just a chatbot?" Rules give a defensible answer. | No |
-| D3 | **Dual-mode PayPal adapter: `live` (sandbox API) and `replay` (recorded fixtures).** Same interface. | Sandbox disputes are slow, rate-limited and sometimes unavailable during a demo. Replay guarantees the demo runs. | No |
-| D4 | **Typed agent envelopes, bounded negotiation (max 3 rounds), no agent-to-agent free chat.** | Prevents infinite loops, runaway cost, and unparseable transcripts. | No |
-| D5 | **Human-in-the-loop via LangGraph `interrupt()` + Postgres checkpointer**, not an ad-hoc approval table. | Durable pause/resume across restarts; the pause is part of the graph. | Yes |
-| D6 | **OpenAPI is the contract**; TS types for the frontend are generated from it. | One source of truth, no drift between FastAPI and Next.js. | Yes |
-| D7 | **AG Grid Community + server-side pagination for MVP** (no Enterprise SSM). | Enterprise server-side row model needs a license; Community cannot do it. | Yes |
+| D3 | **Dual-mode PayPal adapter: `sandbox` (live REST API) and `replay` (recorded fixtures).** Same interface. | Sandbox disputes are slow, rate-limited and sometimes unavailable during a demo. Replay guarantees the demo runs. | No |
+| D4 | **Typed agent envelopes, bounded negotiation (max 2 rounds), no agent-to-agent free chat.** | Prevents infinite loops, runaway cost, and unparseable transcripts. | No |
+| D5 | **Human-in-the-loop implemented as a durable Postgres `approval` row + executor-on-approve**, not a LangGraph `interrupt()`. | The pause survives API restarts without a checkpoint dependency, and the approval is a first-class row the dashboard can query. The graph still produces the proposal; execution stays outside it. | Yes |
+| D6 | **Pydantic response models are the contract; TypeScript types mirror them in `lib/api.ts`.** | One reviewable surface, no build-time codegen step for a 2.5-day build. Drift is caught by typechecking the pages. | Yes |
+| D7 | **AG Grid Community 36 + infinite row model calling the paginated disputes API** (no Enterprise SSM). | Enterprise server-side row model needs a license; Community's infinite model gives real server pagination. | Yes |
 | D8 | **Single-tenant demo, multi-tenant schema.** Every row carries `merchant_id`. | Cheap now, no painful migration later. | No |
 
 ---
@@ -74,11 +77,11 @@ AG Grid dashboard is the merchant control tower.
 
 ---
 
-## 5. Open questions I need answered before M1
+## 5. Resolved before the build
 
-1. **Timeline & team size** — how many dev-days, and who owns frontend vs backend? (Plan assumes ~4.5 dev-days, 2 engineers, parallel tracks.)
-2. **LLM access** — OpenAI/Anthropic/Google key available? Which model families are allowed? Gateway preference (direct vs OpenRouter)?
-3. **PayPal app scopes** — is the sandbox app provisioned with the Disputes feature enabled? (This is the #1 blocker; see 05 §6.)
-4. **AG Grid** — confirm Community is acceptable (no server-side row model) or provide an Enterprise license key.
-5. **Hosting for the demo** — local Docker + Cloudflare/ngrok tunnel, or deployed (Vercel + Fly/Render)? Webhooks need a public URL.
-6. **Branding bar** — do we need the buyer-facing experience to look like a real product surface, or is API-seeded buyer simulation enough?
+1. **Timeline & team size** - solo developer, ~2.5 days. Scope cut to replay-first with one optional live segment.
+2. **LLM access** - Google Gemini via REST; `gemini-3.5-flash-lite` fast, `gemini-3.5-flash` reasoning. Free-tier 503/429 is handled by one bounded retry, then a labelled deterministic fallback.
+3. **PayPal app scopes** - Disputes + Payments verified against the sandbox (OAuth 200, disputes list 200, captures probe 404-not-403). M-10 not triggered.
+4. **AG Grid** - Community 36.3 confirmed; infinite row model + server pagination.
+5. **Hosting** - dropped (rules allow runnable setup instructions). Docker Compose is the demo surface; webhooks only matter in sandbox mode.
+6. **Branding** - merchant control tower only; buyer side stays simulated/API-seeded, stated in the video.

@@ -174,6 +174,13 @@ cd apps/api && uv run python -m scripts.verify_credentials
 
 It prints masked fingerprints, the OAuth result, the Disputes API response, and a real model reply.
 
+Sandbox read path through the application adapter (no write endpoints):
+
+```bash
+cd apps/api
+PAYPAL_MODE=sandbox uv run python -m scripts.verify_sandbox_adapter
+```
+
 ## Honest limits
 
 - Replay refunds are **simulated**. `live_paypal` stays `false` until `PAYPAL_MODE=sandbox` and a
@@ -210,7 +217,8 @@ fixtures/         replay PayPal payloads (3 scenarios)
 [docs/01 architecture](docs/01-system-architecture.md),
 [docs/04 agents](docs/04-agents.md),
 [docs/05 PayPal integration](docs/05-paypal-integration.md),
-[docs/09 verification log](docs/09-manual-actions-checklist.md).
+[docs/09 verification log](docs/09-manual-actions-checklist.md),
+[docs/11 demo script](docs/11-demo-script.md).
 
 ## License
 
