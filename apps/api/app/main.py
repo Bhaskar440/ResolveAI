@@ -1,6 +1,7 @@
-"""ResolveAI API — application factory and health/meta endpoints.
+"""ResolveAI API — application factory.
 
-Run:  uv run uvicorn app.main:app --reload --port 8000
+Run locally:  uv run uvicorn app.main:app --reload --port 8000
+Schema is owned by Alembic:  uv run alembic upgrade head
 """
 
 from __future__ import annotations
@@ -10,32 +11,52 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.api.v1.router import api_router
 from app.core.config import get_settings
+from app.core.errors import register_exception_handlers
+from app.core.logging import configure_logging
+from app.core.middleware import RequestContextMiddleware
 from app.db import models  # noqa: F401  (registers tables on Base.metadata)
-from app.db.base import Base
 from app.db.session import SessionLocal, engine
 
-logger = logging.getLogger("resolveai")
 settings = get_settings()
+logger = logging.getLogger("resolveai")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logging.basicConfig(
-        level=settings.log_level.upper(),
-        format="%(asctime)s %(levelname)-7s %(name)s :: %(message)s",
+    configure_logging(settings.log_level)
+    logger.info(
+        "starting | env=%s mode=%s db=%s",
+        settings.app_env,
+        settings.paypal_mode,
+        _safe_db_target(settings.database_url),
     )
-    logger.info("ResolveAI starting | env=%s paypal=%s", settings.app_env, settings.paypal_mode)
-    if settings.auto_create_schema and settings.app_env in ("local", "demo"):
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("schema ensured (%d tables)", len(Base.metadata.tables))
-    if not settings.paypal_configured and settings.paypal_mode == "sandbox":
-        logger.warning("PAYPAL_MODE=sandbox but credentials are missing — falling back to replay")
+    if settings.paypal_mode == "sandbox" and not settings.paypal_configured:
+        logger.warning("PAYPAL_MODE=sandbox without credentials — live calls will fail closed")
+    if settings.paypal_mode == "replay":
+        logger.info("replay mode: PayPal calls are served from fixtures/ (no network)")
+    try:
+        async with SessionLocal() as session:
+            await session.execute(text("select 1"))
+        logger.info("database connection ok")
+    except Exception as exc:
+        logger.error("database connection FAILED: %s", str(exc).splitlines()[0][:200])
     yield
     await engine.dispose()
+    logger.info("shutdown complete")
+
+
+def _safe_db_target(url: str) -> str:
+    """Log host/db but never the password."""
+    try:
+        tail = url.split("@", 1)[1]
+        return f"...@{tail}"
+    except IndexError:
+        return url
 
 
 app = FastAPI(
@@ -43,6 +64,8 @@ app = FastAPI(
     version="0.1.0",
     description="Autonomous PayPal dispute resolution — API",
     lifespan=lifespan,
+    docs_url="/docs",
+    openapi_url="/api/v1/openapi.json",
 )
 
 app.add_middleware(
@@ -51,7 +74,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID", "X-Response-Time-Ms"],
 )
+app.add_middleware(RequestContextMiddleware)  # outermost: correlates everything
+register_exception_handlers(app)
+app.include_router(api_router)
 
 
 @app.get("/health/live", tags=["ops"])
@@ -60,37 +87,13 @@ async def health_live() -> dict[str, str]:
 
 
 @app.get("/health/ready", tags=["ops"])
-async def health_ready() -> dict[str, object]:
-    db_ok = True
-    detail: str | None = None
+async def health_ready():
     try:
         async with SessionLocal() as session:
             await session.execute(text("select 1"))
-    except Exception as exc:  # pragma: no cover - depends on infra
-        db_ok = False
-        detail = str(exc)[:200]
-    return {
-        "status": "ok" if db_ok else "degraded",
-        "db": db_ok,
-        "detail": detail,
-        "mode": settings.paypal_mode,
-        "autonomy_enabled": True,
-    }
-
-
-@app.get("/api/v1/meta", tags=["ops"])
-async def meta() -> dict[str, object]:
-    """Everything the dashboard header needs in one call."""
-    return {
-        "app": settings.app_name,
-        "env": settings.app_env,
-        "paypal_mode": settings.paypal_mode,
-        "paypal_configured": settings.paypal_configured,
-        "llm_provider": settings.llm_provider or None,
-        "llm_configured": settings.llm_configured,
-        "capabilities": {
-            "live_paypal": settings.paypal_configured and settings.paypal_mode == "sandbox",
-            "agents": settings.llm_configured,
-            "replay": True,
-        },
-    }
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "db": False, "detail": str(exc).splitlines()[0][:200]},
+        )
+    return {"status": "ok", "db": True, "mode": settings.paypal_mode}

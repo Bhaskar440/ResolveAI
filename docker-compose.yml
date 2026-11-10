@@ -6,7 +6,6 @@ services:
       POSTGRES_USER: resolveai
       POSTGRES_PASSWORD: resolveai
       POSTGRES_DB: resolveai
-      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
     ports:
       # 5432 is taken by a host PostgreSQL on this machine — use a dedicated port.
       - "55433:5432"
@@ -17,6 +16,48 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  api:
+    build:
+      context: ./apps/api
+    container_name: resolveai-api
+    env_file:
+      - .env.local
+    environment:
+      # inside the compose network the DB is reachable as `db:5432`
+      DATABASE_URL: postgresql+asyncpg://resolveai:resolveai@db:5432/resolveai
+      APP_ENV: demo
+      WEB_BASE_URL: http://localhost:3000
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  web:
+    build:
+      context: ./apps/web
+    container_name: resolveai-web
+    environment:
+      API_INTERNAL_URL: http://api:8000
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   resolveai_pgdata:

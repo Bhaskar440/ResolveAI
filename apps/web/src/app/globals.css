@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: #070b12;
+  color: #e6edf6;
+  font-feature-settings: "cv02", "cv03", "cv04";
+}
+
+.card {
+  border: 1px solid #1b2536;
+  background: linear-gradient(180deg, #0d1420 0%, #0a1019 100%);
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}

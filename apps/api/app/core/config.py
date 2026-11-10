@@ -1,7 +1,8 @@
 """Application settings.
 
-Loads from the repo-root `.env.local` (git-ignored), then real environment variables
-(which win). `.env.example` documents every key.
+Loads `.env.local` / `.env` by walking up from this file, then real environment
+variables (which always win — that is how docker-compose injects values).
+`.env.example` documents every key.
 """
 
 from __future__ import annotations
@@ -11,13 +12,27 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# apps/api/app/core/config.py -> parents[4] == repo root
-ROOT_DIR = Path(__file__).resolve().parents[4]
+_HERE = Path(__file__).resolve()
+
+
+def _discover_env_files() -> tuple[Path, ...]:
+    """Nearest .env.local / .env going up the tree; empty when none exist.
+
+    Container layouts put the app at /app (no repo root), so this must not assume
+    a fixed depth.
+    """
+    found: list[Path] = []
+    for parent in _HERE.parents:
+        for name in (".env.local", ".env"):
+            candidate = parent / name
+            if candidate.exists() and candidate not in found:
+                found.append(candidate)
+    return tuple(found[:4])
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(ROOT_DIR / ".env.local", ROOT_DIR / ".env"),
+        env_file=_discover_env_files(),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -38,9 +53,8 @@ class Settings(BaseSettings):
     plan_signing_key: str = ""
 
     # db
-    database_url: str = "postgresql+asyncpg://resolveai:resolveai@localhost:5432/resolveai"
+    database_url: str = "postgresql+asyncpg://resolveai:resolveai@localhost:55433/resolveai"
     db_echo: bool = False
-    auto_create_schema: bool = True
 
     # paypal
     paypal_mode: str = "replay"  # replay | sandbox | mock

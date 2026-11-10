@@ -71,10 +71,10 @@ exists, whether anything is deployed.
 | A-06 | Local git repo init + first commit (docs only) | **COMPLETED** | `git log` |
 | A-07 | Download `cloudflared.exe` to `tools/` + verify a quick tunnel (no account) | `NOT STARTED` |
 | A-08 | Monorepo scaffold, `docker-compose.yml` (Postgres), FastAPI app factory | **COMPLETED** | §7 V7–V9 |
-| A-09 | DB models (18 tables) + dev auto-create + seed script with fixture data | **PARTIAL** — models done, seed pending | §7 V8 |
+| A-09 | DB models (18 tables) + Alembic migrations + seed script with fixture data | **PARTIAL** — models + migrations done, seed pending | §7 V12 |
 | A-10 | PayPal adapter skeleton with `replay` mode + fixtures (works with **zero** credentials) | `NOT STARTED` (fixtures written) | `fixtures/disputes/demo_scenarios.json` |
 | A-11 | Policy engine + `rules.yaml` + unit tests (pure, no LLM) | **COMPLETED** — 11 tests green | §7 V10 |
-| A-12 | Next.js shell + AG Grid with replay data | `NOT STARTED` |
+| A-12 | Next.js app shell (server-rendered status page, error boundary, Tailwind) | **COMPLETED** — AG Grid still pending (next milestone) | §7 V14–V17 |
 
 ---
 
@@ -370,5 +370,12 @@ authorize Git/hosting OAuth · record the pitch video · submit on Devpost · ap
 | V9 | API boots | `GET /health/ready`, `GET /api/v1/meta` | OK: `{"status":"ok","db":true,"mode":"replay"}`; meta honestly reports `live_paypal:false, agents:false` (no credentials yet). |
 | V10 | Policy engine correct | `uv run pytest -q` | OK: **11 passed** (caps, fraud reasons, refundable clamp, currency deny, deadline pressure, digest stability). |
 | V11 | Local secrets generated safely | read `.env.local` + `git check-ignore` | OK: 4 keys x 64 hex, unique, non-zero; file ignored by git. |
+| V12 | Schema owned by migrations | `uv run alembic upgrade head` | OK: revision `54fac61221b4` applied; **19 tables** = 18 domain + `alembic_version`. `create_all` removed from the app. |
+| V13 | API contract | `TestClient` against the real app | OK: `/health/live` 200, `/health/ready` 200 `{"db":true}`, `/api/v1/system/status` 200 with measured latency, `/api/v1/disputes` 200 `{items:[],total:0}`, 404 returns the standard envelope with the same `request_id` as the `X-Request-ID` header. |
+| V14 | Frontend builds | `npm run build` + `npx tsc --noEmit` | OK: Next.js **15.5.29** compiled, 0 type errors. Upgraded from 15.5.4 after npm flagged **CVE-2025-66478**. |
+| V15 | Frontend reads the real backend | `GET http://localhost:3000` (server-rendered HTML) | OK: page contains the measured string `217.92 ms · 19 tables`, the live request id, and `No disputes ingested yet` (real empty DB). No fallback values exist in the code. |
+| V16 | Honest failure path | page fetched with the API stopped | OK: rendered `connection failed` + `Cannot reach http://localhost:8000/...`; no fabricated numbers. |
+| V17 | Full compose stack | `docker compose up -d`, then fetch `:3000` | OK: `db` healthy, `api` healthy, `web` up; containerized page also shows `19 tables` and the live counts. |
+| V18 | Container env handling | rebuild after config change | Fixed: `ROOT_DIR = parents[4]` crashed inside the image (`/app/app/core/config.py`). Replaced with upward `.env` discovery; container now starts with env-only config. A later cosmetic `/health` alias was reverted so the running image matches `main`. |
 
 *Nothing in this file is marked COMPLETED until the corresponding check above actually passes.*
