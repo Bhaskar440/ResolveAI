@@ -30,6 +30,33 @@ class PlanIntegrityError(RuntimeError):
     pass
 
 
+class RefundNotConfirmedError(RuntimeError):
+    """PayPal accepted the call but did not confirm a successful refund state."""
+
+
+async def _verify_refund(adapter, receipt):
+    """Ask PayPal for the refund's current status before we call it a success.
+
+    The POST response is already PayPal's confirmation, but a follow-up GET catches
+    the case where the refund immediately settles as FAILED/CANCELLED. A failed
+    verification never fabricates success; it keeps the POST status and is logged.
+    """
+    if receipt.simulated or not receipt.paypal_refund_id:
+        return receipt
+    try:
+        confirmed = await adapter.get_refund(receipt.paypal_refund_id)
+    except Exception as exc:  # noqa: BLE001 - verification is best-effort, never faked
+        logger.warning("could not verify refund %s: %s", receipt.paypal_refund_id, exc)
+        return receipt
+    logger.info(
+        "refund %s verified: post=%s get=%s",
+        receipt.paypal_refund_id,
+        receipt.status,
+        confirmed.status,
+    )
+    return confirmed
+
+
 async def execute_plan(
     session: AsyncSession,
     *,
@@ -71,6 +98,14 @@ async def execute_plan(
         idempotency_key=plan.idempotency_key,
         note=plan.note,
     )
+    receipt = await _verify_refund(adapter, receipt)
+
+    confirmed_status = receipt.status.upper()
+    if confirmed_status not in {"COMPLETED", "PENDING"}:
+        raise RefundNotConfirmedError(
+            f"PayPal refund {receipt.paypal_refund_id} is {receipt.status}; "
+            "not marking the dispute resolved"
+        )
 
     refund = Refund(
         merchant_id=dispute.merchant_id,
@@ -99,9 +134,14 @@ async def execute_plan(
             return existing
         raise
 
-    dispute.status = "RESOLVED"
-    dispute.resolved_at = datetime.now(UTC)
-    dispute.recovered_amount = money(plan.amount)
+    if confirmed_status == "COMPLETED":
+        dispute.status = "RESOLVED"
+        dispute.resolved_at = datetime.now(UTC)
+        dispute.recovered_amount = money(plan.amount)
+    else:
+        # PayPal accepted the refund but has not settled it yet. Do not call it resolved.
+        dispute.status = "REFUND_PENDING"
+        dispute.recovered_amount = None
     if decision is not None:
         decision.status = "executed"
 
@@ -117,6 +157,7 @@ async def execute_plan(
             "amount": str(plan.amount),
             "currency": plan.currency,
             "action": plan.action,
+            "status": receipt.status,
             "simulated": receipt.simulated,
             "capture": plan.capture_id,
         },

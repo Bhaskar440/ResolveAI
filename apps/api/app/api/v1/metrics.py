@@ -11,7 +11,7 @@ from app.schemas.responses import Metrics
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
-OPEN_STATES = ("RECEIVED", "ANALYZING", "AWAITING_APPROVAL")
+OPEN_STATES = ("RECEIVED", "ANALYZING", "AWAITING_APPROVAL", "REFUND_PENDING")
 
 
 @router.get("", response_model=Metrics)
@@ -29,7 +29,11 @@ async def metrics(session: SessionDep) -> Metrics:
         )
     ).scalar_one()
     recovered = (
-        await session.execute(select(func.coalesce(func.sum(Refund.amount), 0)))
+        await session.execute(
+            select(func.coalesce(func.sum(Refund.amount), 0)).where(
+                Refund.status == "COMPLETED"
+            )
+        )
     ).scalar_one()
     auto_executed = (
         await session.execute(

@@ -44,7 +44,7 @@ exists, whether anything is deployed.
 | **M-02** | PayPal Developer app with **Disputes** feature — Client ID + Secret | You | **COMPLETED** 2026-11-10 — OAuth 200 + Disputes API 200 (§7 V19–V20) | Everything PayPal |
 | **M-04** | LLM API key (Gemini **or** OpenAI) | You | **COMPLETED** 2026-11-10 — Gemini key valid, generation returns `OK` (§7 V22–V23) | All agent work |
 | **M-05** | **Public** GitHub repo + MIT license in About + one-time push auth | You | **WAITING FOR ME** | C3, C4 — pass/fail rule |
-| **M-03** | Confirm sandbox business + personal (buyer) accounts and their logins | You | **WAITING FOR ME** | Dispute filing, live demo |
+| **M-03** | Confirm sandbox business + personal (buyer) accounts and their logins | You | **COMPLETED** 2026-11-10 - personal buyer `sb-wp5y...@personal.example.com`, balance $5,000 confirmed | Dispute filing, live demo |
 | **M-06** | Approve autonomy numbers + the 3 demo scenarios | You | **WAITING FOR ME** | Policy rules |
 | **M-13** | YouTube account ready for a **public** upload | You | **WAITING FOR ME** | C7 — video is 20% of score |
 
@@ -73,12 +73,30 @@ exists, whether anything is deployed.
 | A-08 | Monorepo scaffold, `docker-compose.yml` (Postgres), FastAPI app factory | **COMPLETED** | §7 V7–V9 |
 | A-09 | DB models (19 tables) + Alembic migrations + seed script with fixture data | **COMPLETED** | §7 V12, V25 |
 | A-10 | PayPal adapter: `replay` (fixtures, zero credentials) + `sandbox` (live REST) behind one Protocol | **COMPLETED** | `app/paypal/`, §7 V25–V26 |
-| A-11 | Policy engine + `rules.yaml` + unit tests (pure, no LLM) | **COMPLETED** — 19 tests green | §7 V10, V31 |
+| A-11 | Policy engine + `rules.yaml` + unit tests (pure, no LLM) | **COMPLETED** — 28 tests green | §7 V10, V31, V33 |
 | A-12 | Next.js dashboard: AG Grid infinite model, approvals, trace, honest mode badge | **COMPLETED** | §7 V29–V31 |
 | A-13 | LangGraph spine: Buyer ∥ Merchant → Resolution → policy gate → Payment, bounded 2 rounds | **COMPLETED** | §7 V26–V28 |
 | A-14 | Signed-plan executor with idempotent refunds + hash-chained audit log | **COMPLETED** | §7 V26–V27 |
 | A-15 | Approval workflow persisted in Postgres (survives restarts), approve/reject API | **COMPLETED** | §7 V27 |
 | A-16 | Webhooks: signature verification + delivery dedupe (live path gated to sandbox mode) | **COMPLETED (replay-safe)** | `app/api/v1/webhooks.py` |
+| A-17 | App-level payment lifecycle: create order, capture approved order, read order/capture/refund | **COMPLETED (code + replay e2e)** | `app/services/payments.py`, `app/api/v1/payments.py`, V34 |
+| A-18 | Order + capture + refund rows stored in PostgreSQL (idempotent on PayPal ids) | **COMPLETED** | 5 orders / 4 captures in DB after probe, V34 |
+| A-19 | Full + partial refunds with post-refund status verification | **COMPLETED (replay)** / live `WAITING FOR ME` | `app/services/execution.py`, V33 |
+| A-20 | Webhook capture/refund event persistence + replay-honest signature flag | **COMPLETED** | `app/api/v1/webhooks.py` |
+
+### 1d. Phase 2 — PayPal integration (prompt requirements)
+
+| ID | Requirement | Status | Evidence / remaining step |
+|---|---|---|---|
+| P2-1 | OAuth 2.0 access token on the backend | **COMPLETED** | live token 200 (V19); cached until expiry, one 401 refresh tested (V33) |
+| P2-2 | Create an order | **COMPLETED** | live order `6AL6984323999660M` created through the app service, `PAYER_ACTION_REQUIRED`, row stored in PG (V34) |
+| P2-3 | Capture an approved payment | **WAITING FOR ME** | code path is live-ready and refuses unapproved orders; all 3 buyer orders still report `PAYER_ACTION_REQUIRED` / `payer=not approved` (V34) |
+| P2-4 | Retrieve payment and capture details | **COMPLETED (orders live)** / capture read pending capture | `GET /v2/checkout/orders/{id}`, `GET /v2/payments/captures/{id}`, `GET /v2/payments/refunds/{id}`; live order reads verified (V34) |
+| P2-5 | Full and partial refunds where supported | **WAITING FOR ME** | adapter sends exact amount (full or partial) with PayPal idempotency key; replay full/partial + status verification tested (V33); live refund needs a real capture first |
+| P2-6 | PayPal webhook endpoint | **COMPLETED** | `POST /api/v1/webhooks/paypal`; dedupes on `event.id`; persists dispute/capture/refund events |
+| P2-7 | Verify webhook signatures | **WAITING FOR ME** | calls `/v1/notifications/verify-webhook-signature`; header mapping + signature failure gate unit-tested (V33). `PAYPAL_WEBHOOK_ID` is empty and no public URL exists, so no live signed event has landed yet |
+| P2-8 | Store payment and refund records in PostgreSQL | **COMPLETED** | `orders`, `captures`, `refunds`; live probe order + replay capture rows verified (V34); refund rows already verified V26–V27 |
+| P2-9 | Sandbox buyer + seller test workflow | **WAITING FOR ME** | 3 checkouts exist (V34); buyer must approve order 1 before capture -> dispute -> refund can be executed |
 
 ---
 
@@ -395,5 +413,9 @@ authorize Git/hosting OAuth · record the pitch video · submit on Devpost · ap
 | V30 | Case file is auditable | fetch `/disputes/{id}` | OK: renders agent step timeline (LLM/fallback/policy/plan badges), typed transcript with evidence refs, matched policy rules and both envelope passes, and receipts marked **simulated (replay)**. |
 | V31 | Backend + frontend checks | `uv run pytest -q`, `npx tsc --noEmit`, `npm run build` | OK: **19 passed** (deterministic graph with LLM forced offline, signature tampering, idempotency key stability, replay receipt determinism, policy suite); 0 type errors; Next build compiles `/` and `/disputes/[id]`. |
 | V32 | Sandbox adapter read path (application code) | `PAYPAL_MODE=sandbox uv run python -m scripts.verify_sandbox_adapter` | OK 2026-11-10: OAuth through the app, `GET /v1/customer/disputes` **200**, 0 disputes visible (none filed yet - M-07). Found and fixed a real constraint: `page_size=100` is rejected with `INVALID_PAGE_SIZE`; the adapter now requests 50 and paginates. No write endpoint was called. |
+| V33 | Phase 2 wire contract + replay lifecycle | `uv run pytest -q` | OK 2026-11-10: **28 passed**. New tests assert order-create payload and approval link, capture idempotency header, exact partial-refund amount, capture/refund reads, PayPal error name/message/debug_id, webhook header mapping, token caching, one 401 refresh, and replay order -> capture -> refund determinism. Mocked HTTP: no live success claimed. |
+| V34 | Live read + app-level order create + PostgreSQL persistence | `PAYPAL_MODE=sandbox uv run python -m scripts.verify_sandbox_adapter`; `... scripts.sandbox_probe_order`; API replay create/capture | OK 2026-11-10: live OAuth; `GET /v2/checkout/orders/{id}` for all 3 buyer orders returned **PAYER_ACTION_REQUIRED**, `payer=not approved`, no capture. App service created probe order `6AL6984323999660M` ($1.00, `PAYER_ACTION_REQUIRED`) and stored it in `orders` with `mode=sandbox`. Replay HTTP path create -> capture -> get capture worked end-to-end and was clearly `simulated=true`; DB then held **5 orders / 4 captures**. Webhook id still empty. **No capture or refund is claimed;** capture/refund remain blocked on buyer approval. |
+
+| V35 | Webhook endpoint stores, dedupes, and reports signature truthfully | `POST /api/v1/webhooks/paypal` (replay) twice with the same event | OK 2026-11-10: first call `stored`, second `duplicate`; delivery row records `signature_valid=false` (no PayPal signature was checked, so it must not claim true). In sandbox mode the route fails closed when `PAYPAL_WEBHOOK_ID` is empty. Live signed event still blocked on webhook registration + public URL (P2-7). |
 
 *Nothing in this file is marked COMPLETED until the corresponding check above actually passes.*

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -69,9 +70,78 @@ class ReplayAdapter:
 
     def __init__(self) -> None:
         self._data = load_fixtures()
+        self._orders: dict[str, NormalizedOrder] = {}
+        self._refunds: dict[str, RefundReceipt] = {}
 
     def fixtures_version(self) -> str:
         return str(self._data.get("version", "unknown"))
+
+    @staticmethod
+    def _digest(*parts: object) -> str:
+        raw = ":".join(str(p) for p in parts)
+        return hashlib.sha256(raw.encode()).hexdigest()[:12].upper()
+
+    async def create_order(
+        self,
+        *,
+        amount,
+        currency: str,
+        description: str,
+        invoice_id: str,
+        return_url: str | None = None,
+        cancel_url: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> NormalizedOrder:
+        order_id = f"REPLAY-ORDER-{self._digest(invoice_id, amount, idempotency_key)}"
+        # Replay models the moment after a buyer approved the checkout, so the rest
+        # of the lifecycle (capture -> refund) can be exercised without PayPal.
+        # Every object is marked simulated=True and the UI labels it that way.
+        order = NormalizedOrder(
+            paypal_order_id=order_id,
+            amount=Decimal(amount),
+            currency=currency,
+            status="APPROVED",
+            item_title=description,
+            invoice_id=invoice_id,
+            simulated=True,
+            raw={
+                "mode": "replay",
+                "idempotency_key": idempotency_key,
+                "return_url": return_url,
+                "cancel_url": cancel_url,
+            },
+        )
+        self._orders[order_id] = order
+        return order
+
+    async def get_order(self, order_id: str) -> NormalizedOrder:
+        if order_id not in self._orders:
+            raise KeyError(f"unknown replay order {order_id}")
+        return self._orders[order_id]
+
+    async def capture_order(self, order_id: str, *, idempotency_key: str) -> NormalizedOrder:
+        order = await self.get_order(order_id)
+        if order.capture is not None:
+            return order
+        capture = NormalizedCapture(
+            paypal_capture_id=f"REPLAY-CAP-{self._digest(order_id, idempotency_key)}",
+            status="COMPLETED",
+            amount=order.amount,
+            currency=order.currency,
+            order_id=order_id,
+            refundable_amount=order.amount,
+            simulated=True,
+            raw={"mode": "replay", "idempotency_key": idempotency_key},
+        )
+        updated = order.model_copy(update={"status": "COMPLETED", "capture": capture})
+        self._orders[order_id] = updated
+        return updated
+
+    async def get_capture(self, capture_id: str) -> NormalizedCapture:
+        for order in self._orders.values():
+            if order.capture and order.capture.paypal_capture_id == capture_id:
+                return order.capture
+        raise KeyError(f"unknown replay capture {capture_id}")
 
     async def list_disputes(self) -> list[NormalizedDispute]:
         return [parse_dispute(d) for d in self._data.get("disputes", [])]
@@ -92,10 +162,10 @@ class ReplayAdapter:
         note: str | None = None,
     ) -> RefundReceipt:
         digest = hashlib.sha256(f"{capture_id}:{idempotency_key}".encode()).hexdigest()[:12]
-        return RefundReceipt(
+        receipt = RefundReceipt(
             paypal_refund_id=f"REPLAY-RF-{digest.upper()}",
             status="COMPLETED",
-            amount=amount,
+            amount=Decimal(amount),
             currency=currency,
             simulated=True,
             raw={
@@ -105,7 +175,15 @@ class ReplayAdapter:
                 "idempotency_key": idempotency_key,
             },
         )
+        self._refunds[receipt.paypal_refund_id] = receipt
+        return receipt
+
+    async def get_refund(self, refund_id: str) -> RefundReceipt:
+        if refund_id not in self._refunds:
+            raise KeyError(f"unknown replay refund {refund_id}")
+        return self._refunds[refund_id]
 
     async def verify_webhook(self, headers: dict[str, str], event: dict[str, Any]) -> bool:
-        # Replay mode accepts synthetic events; the delivery row records `signature_valid=False`.
-        return True
+        # Replay accepts synthetic events for local demos, but reports the truth:
+        # no PayPal signature was verified, so the delivery row stores False.
+        return False

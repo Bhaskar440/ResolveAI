@@ -45,6 +45,39 @@ def test_no_plan_for_non_money_actions():
 
 
 @pytest.mark.asyncio
+async def test_replay_order_lifecycle_is_simulated_and_idempotent():
+    adapter = ReplayAdapter()
+    order = await adapter.create_order(
+        amount=Decimal(40),
+        currency="USD",
+        description="Replay mug",
+        invoice_id="INV-REPLAY",
+        idempotency_key="order-key",
+    )
+    assert order.simulated is True
+    assert order.paypal_order_id.startswith("REPLAY-ORDER-")
+
+    captured = await adapter.capture_order(order.paypal_order_id, idempotency_key="cap-key")
+    assert captured.capture is not None
+    assert captured.capture.simulated is True
+    assert captured.capture.status == "COMPLETED"
+
+    again = await adapter.capture_order(order.paypal_order_id, idempotency_key="cap-key")
+    assert again.capture is not None
+    assert again.capture.paypal_capture_id == captured.capture.paypal_capture_id
+
+    refund = await adapter.refund(
+        captured.capture.paypal_capture_id,
+        Decimal("20.00"),
+        "USD",
+        idempotency_key="refund-key",
+    )
+    verified = await adapter.get_refund(refund.paypal_refund_id)
+    assert verified.simulated is True
+    assert verified.paypal_refund_id == refund.paypal_refund_id
+
+
+@pytest.mark.asyncio
 async def test_replay_refunds_are_simulated_and_deterministic():
     adapter = ReplayAdapter()
     first = await adapter.refund(

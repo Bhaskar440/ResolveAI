@@ -5,7 +5,7 @@ Two implementations, one interface:
   * sandbox — real https://api-m.sandbox.paypal.com calls
 
 The rest of the app never branches on mode; it just calls these methods and reads
-`receipt.simulated` when it needs to label a result honestly.
+`simulated` when it needs to label a result honestly.
 """
 
 from __future__ import annotations
@@ -17,22 +17,32 @@ from typing import Any, Protocol
 from pydantic import BaseModel, Field
 
 
-class NormalizedOrder(BaseModel):
-    paypal_order_id: str
-    amount: Decimal
-    currency: str = "USD"
-    item_title: str | None = None
-    created_at_paypal: datetime | None = None
-    buyer_email: str | None = None
-
-
 class NormalizedCapture(BaseModel):
     paypal_capture_id: str
     status: str = "COMPLETED"
     amount: Decimal
     currency: str = "USD"
+    order_id: str | None = None
     seller_protection_status: str = "UNKNOWN"
     refundable_amount: Decimal | None = None
+    final_capture: bool = True
+    simulated: bool = False
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
+class NormalizedOrder(BaseModel):
+    paypal_order_id: str
+    amount: Decimal
+    currency: str = "USD"
+    status: str = "CREATED"
+    item_title: str | None = None
+    invoice_id: str | None = None
+    created_at_paypal: datetime | None = None
+    buyer_email: str | None = None
+    approval_url: str | None = None
+    capture: NormalizedCapture | None = None
+    simulated: bool = False
+    raw: dict[str, Any] = Field(default_factory=dict)
 
 
 class NormalizedMessage(BaseModel):
@@ -91,6 +101,26 @@ class PayPalAdapter(Protocol):
 
     async def get_dispute(self, dispute_id: str) -> NormalizedDispute: ...
 
+    async def create_order(
+        self,
+        *,
+        amount: Decimal,
+        currency: str,
+        description: str,
+        invoice_id: str,
+        return_url: str | None = None,
+        cancel_url: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> NormalizedOrder: ...
+
+    async def get_order(self, order_id: str) -> NormalizedOrder: ...
+
+    async def capture_order(
+        self, order_id: str, *, idempotency_key: str
+    ) -> NormalizedOrder: ...
+
+    async def get_capture(self, capture_id: str) -> NormalizedCapture: ...
+
     async def refund(
         self,
         capture_id: str,
@@ -100,5 +130,7 @@ class PayPalAdapter(Protocol):
         idempotency_key: str,
         note: str | None = None,
     ) -> RefundReceipt: ...
+
+    async def get_refund(self, refund_id: str) -> RefundReceipt: ...
 
     async def verify_webhook(self, headers: dict[str, str], event: dict[str, Any]) -> bool: ...

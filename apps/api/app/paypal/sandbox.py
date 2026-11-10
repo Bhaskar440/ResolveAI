@@ -1,11 +1,15 @@
 """Live sandbox adapter — real PayPal REST calls.
 
-Read/write surface is intentionally tiny:
-  * read:   GET /v1/customer/disputes, GET /v1/customer/disputes/{id}
-  * write:  POST /v2/payments/captures/{id}/refund   (only via the executor)
+Read/write surface:
+  * auth:   POST /v1/oauth2/token (client credentials, cached until expiry)
+  * orders: POST/GET /v2/checkout/orders, POST /v2/checkout/orders/{id}/capture
+  * reads:  GET /v2/payments/captures/{id}, GET /v2/payments/refunds/{id}
+  * refund: POST /v2/payments/captures/{id}/refund   (only via the executor)
+  * disputes: GET /v1/customer/disputes, GET /v1/customer/disputes/{id}
   * verify: POST /v1/notifications/verify-webhook-signature
 
-No agent can reach this class directly; only `execution_service` calls `refund()`.
+No agent can reach this class directly; only `execution_service` calls `refund()`
+and `payment_service` calls the order/capture methods.
 """
 
 from __future__ import annotations
@@ -43,6 +47,66 @@ def _money(block: dict[str, Any] | None) -> tuple[Decimal, str]:
     block = block or {}
     value = block.get("value") or block.get("total") or "0"
     return Decimal(str(value)), str(block.get("currency_code") or "USD")
+
+
+def _links(body: dict[str, Any]) -> dict[str, str]:
+    return {
+        str(link.get("rel")): str(link.get("href"))
+        for link in body.get("links") or []
+        if link.get("rel") and link.get("href")
+    }
+
+
+def _first_capture_body(order: dict[str, Any]) -> dict[str, Any] | None:
+    for unit in order.get("purchase_units") or []:
+        for capture in (unit.get("payments") or {}).get("captures") or []:
+            return capture
+    return None
+
+
+def normalize_capture(
+    body: dict[str, Any], *, order_id: str | None = None
+) -> NormalizedCapture:
+    amount, currency = _money(body.get("amount"))
+    related = (body.get("supplementary_data") or {}).get("related_ids") or {}
+    protection = body.get("seller_protection") or {}
+    return NormalizedCapture(
+        paypal_capture_id=str(body.get("id") or ""),
+        status=str(body.get("status") or "UNKNOWN"),
+        amount=amount,
+        currency=currency,
+        order_id=order_id or related.get("order_id"),
+        seller_protection_status=str(protection.get("status") or "UNKNOWN"),
+        refundable_amount=amount,
+        final_capture=bool(body.get("final_capture", True)),
+        raw=body,
+    )
+
+
+def normalize_order(body: dict[str, Any]) -> NormalizedOrder:
+    unit = (body.get("purchase_units") or [{}])[0]
+    capture_body = _first_capture_body(body)
+    amount, currency = _money(unit.get("amount"))
+    capture = None
+    if capture_body:
+        capture = normalize_capture(capture_body, order_id=str(body.get("id") or "") or None)
+        if amount == 0:
+            amount, currency = capture.amount, capture.currency
+    payer = (body.get("payment_source") or {}).get("paypal") or body.get("payer") or {}
+    links = _links(body)
+    return NormalizedOrder(
+        paypal_order_id=str(body.get("id") or ""),
+        amount=amount,
+        currency=currency,
+        status=str(body.get("status") or "CREATED"),
+        item_title=unit.get("description"),
+        invoice_id=unit.get("invoice_id"),
+        created_at_paypal=_dt(body.get("create_time")),
+        buyer_email=payer.get("email_address"),
+        approval_url=links.get("payer-action") or links.get("approve"),
+        capture=capture,
+        raw=body,
+    )
 
 
 def normalize_dispute(item: dict[str, Any]) -> NormalizedDispute:
@@ -104,8 +168,9 @@ def normalize_dispute(item: dict[str, Any]) -> NormalizedDispute:
 class SandboxAdapter:
     mode = "sandbox"
 
-    def __init__(self) -> None:
+    def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self._settings = get_settings()
+        self._transport = transport
         self._token: str | None = None
         self._expires_at = 0.0
 
@@ -132,7 +197,7 @@ class SandboxAdapter:
     async def _request(
         self, method: str, path: str, *, json: dict | None = None, extra: dict | None = None
     ) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=30, transport=self._transport) as client:
             token = await self._access_token(client)
             headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
             headers.update(extra or {})
@@ -160,6 +225,80 @@ class SandboxAdapter:
                 err.get("debug_id"),
             )
         return res.json() if res.content else {}
+
+    # ------------------------------------------------------------------ orders
+    async def create_order(
+        self,
+        *,
+        amount,
+        currency: str,
+        description: str,
+        invoice_id: str,
+        return_url: str | None = None,
+        cancel_url: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> NormalizedOrder:
+        context: dict[str, Any] = {
+            "brand_name": self._settings.demo_merchant_name,
+            "locale": "en-US",
+            "landing_page": "LOGIN",
+            "shipping_preference": "NO_SHIPPING",
+            "user_action": "PAY_NOW",
+        }
+        if return_url:
+            context["return_url"] = return_url
+        if cancel_url:
+            context["cancel_url"] = cancel_url
+        payload = {
+            "intent": "CAPTURE",
+            "purchase_units": [
+                {
+                    "reference_id": invoice_id,
+                    "description": description,
+                    "invoice_id": invoice_id,
+                    "amount": {
+                        "currency_code": currency,
+                        "value": f"{Decimal(amount):.2f}",
+                    },
+                }
+            ],
+            "payment_source": {"paypal": {"experience_context": context}},
+        }
+        extra = {"Prefer": "return=representation"}
+        if idempotency_key:
+            extra["PayPal-Request-Id"] = idempotency_key
+        body = await self._request("POST", "/v2/checkout/orders", json=payload, extra=extra)
+        return normalize_order(body)
+
+    async def get_order(self, order_id: str) -> NormalizedOrder:
+        body = await self._request("GET", f"/v2/checkout/orders/{order_id}")
+        return normalize_order(body)
+
+    async def capture_order(self, order_id: str, *, idempotency_key: str) -> NormalizedOrder:
+        body = await self._request(
+            "POST",
+            f"/v2/checkout/orders/{order_id}/capture",
+            json={},
+            extra={"PayPal-Request-Id": idempotency_key, "Prefer": "return=representation"},
+        )
+        return normalize_order(body)
+
+    # ---------------------------------------------------------------- payments
+    async def get_capture(self, capture_id: str) -> NormalizedCapture:
+        body = await self._request("GET", f"/v2/payments/captures/{capture_id}")
+        return normalize_capture(body)
+
+    async def get_refund(self, refund_id: str) -> RefundReceipt:
+        body = await self._request("GET", f"/v2/payments/refunds/{refund_id}")
+        amount, currency = _money(body.get("amount"))
+        return RefundReceipt(
+            paypal_refund_id=str(body.get("id") or refund_id),
+            status=str(body.get("status") or "UNKNOWN"),
+            amount=amount,
+            currency=currency,
+            simulated=False,
+            raw=body,
+        )
 
     async def list_disputes(self) -> list[NormalizedDispute]:
         items: list[dict[str, Any]] = []
