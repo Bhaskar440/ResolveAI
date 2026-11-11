@@ -60,6 +60,15 @@ class Settings(BaseSettings):
     fixtures_dir: str = ""
     demo_merchant_slug: str = "northwind"
     demo_merchant_name: str = "Northwind Supply Co."
+    demo_user_email: str = "owner@northwind.example"
+    demo_user_password: str = "resolveai-demo"
+    demo_user_name: str = "Avery Chen"
+    demo_user_role: str = "owner"
+
+    # auth / sessions
+    auth_cookie_name: str = "resolveai_session"
+    auth_session_hours: int = 12
+    auth_cookie_secure: bool = False
 
     # paypal
     paypal_mode: str = "replay"  # replay | sandbox | mock

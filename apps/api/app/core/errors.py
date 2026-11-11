@@ -56,6 +56,12 @@ class ConflictError(AppError):
     message = "The resource is not in a state that allows this action."
 
 
+class UnauthorizedError(AppError):
+    status_code = 401
+    code = "UNAUTHENTICATED"
+    message = "Sign in to continue."
+
+
 class ValidationError(AppError):
     status_code = 422
     code = "VALIDATION_ERROR"

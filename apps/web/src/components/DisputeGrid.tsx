@@ -33,10 +33,29 @@ const theme = themeQuartz.withParams({
 
 const SORTABLE = new Set(["response_due_by", "amount", "confidence", "status", "created_at"]);
 
-export function DisputeGrid() {
+export function DisputeGrid({
+  status,
+  reason,
+  sort: sortOverride,
+  searchQuery: controlledQuery,
+  showToolbar = true,
+  compact = false,
+  heightClass = "h-[520px]",
+  emptyMessage = "No disputes match. Seed the demo data.",
+}: {
+  status?: string;
+  reason?: string;
+  sort?: string;
+  searchQuery?: string;
+  showToolbar?: boolean;
+  compact?: boolean;
+  heightClass?: string;
+  emptyMessage?: string;
+}) {
   const router = useRouter();
   const gridRef = useRef<AgGridReact<Dispute>>(null);
-  const [query, setQuery] = useState("");
+  const [internalQuery, setInternalQuery] = useState("");
+  const query = controlledQuery ?? internalQuery;
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<number | null>(null);
 
@@ -47,14 +66,17 @@ export function DisputeGrid() {
           const limit = Math.max(1, params.endRow - params.startRow);
           const sortModel = params.sortModel?.[0];
           const sort =
-            sortModel && SORTABLE.has(sortModel.colId)
+            sortOverride ??
+            (sortModel && SORTABLE.has(sortModel.colId)
               ? `${sortModel.colId}:${sortModel.sort ?? "asc"}`
-              : "response_due_by:asc";
+              : "response_due_by:asc");
           const res = await getDisputes({
             limit,
             offset: params.startRow,
             sort,
             q: query.trim() || undefined,
+            status: status || undefined,
+            reason: reason || undefined,
           });
           setError(null);
           setLoaded(res.total);
@@ -65,15 +87,15 @@ export function DisputeGrid() {
         }
       },
     }),
-    [query],
+    [query, status, reason, sortOverride],
   );
 
   useEffect(() => {
     gridRef.current?.api?.purgeInfiniteCache();
-  }, [query]);
+  }, [query, status, reason, sortOverride]);
 
-  const columnDefs = useMemo<ColDef<Dispute>[]>(
-    () => [
+  const columnDefs = useMemo<ColDef<Dispute>[]>(() => {
+    const defs: ColDef<Dispute>[] = [
       {
         headerName: "Case",
         colId: "paypal_case_number",
@@ -150,29 +172,42 @@ export function DisputeGrid() {
             <span className="mono text-[10px] uppercase tracking-wider text-slate-600">auto</span>
           ),
       },
-    ],
-    [],
-  );
+    ];
+    if (!compact) return defs;
+    const widths: Record<string, number> = {
+      paypal_case_number: 128,
+      reason_code: 142,
+      buyer_label: 110,
+      amount: 100,
+      status: 150,
+    };
+    const keep = new Set(Object.keys(widths));
+    return defs
+      .filter((def) => keep.has(def.colId ?? def.field ?? ""))
+      .map((def) => ({ ...def, width: widths[def.colId ?? def.field ?? ""] ?? def.width }));
+  }, [compact]);
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="relative">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search case, buyer or reason…"
-            className="mono w-72 rounded-md border border-slate-800 bg-[#0a1019] px-3 py-1.5 text-[11px] text-slate-200 placeholder:text-slate-600 focus:border-slate-600 focus:outline-none"
-          />
+      {showToolbar && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="relative">
+            <input
+              value={query}
+              onChange={(e) => setInternalQuery(e.target.value)}
+              placeholder="Search case, buyer or reason…"
+              className="mono w-full min-w-[220px] rounded-md border border-slate-800 bg-[#0a1019] px-3 py-1.5 text-[11px] text-slate-200 placeholder:text-slate-600 focus:border-slate-600 focus:outline-none sm:w-72"
+            />
+          </div>
+          <div className="mono flex items-center gap-3 text-[10px] uppercase tracking-wider text-slate-500">
+            <span>{loaded === null ? "loading…" : `${loaded} disputes`}</span>
+            <span className="text-slate-700">·</span>
+            <span>infinite row model</span>
+            <span className="text-slate-700">·</span>
+            <span>server pagination 25/page</span>
+          </div>
         </div>
-        <div className="mono flex items-center gap-3 text-[10px] uppercase tracking-wider text-slate-500">
-          <span>{loaded === null ? "loading…" : `${loaded} disputes`}</span>
-          <span className="text-slate-700">·</span>
-          <span>infinite row model</span>
-          <span className="text-slate-700">·</span>
-          <span>server pagination 25/page</span>
-        </div>
-      </div>
+      )}
 
       {error && (
         <div className="mono mb-3 rounded border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-[11px] text-rose-300">
@@ -180,7 +215,7 @@ export function DisputeGrid() {
         </div>
       )}
 
-      <div className="h-[520px] overflow-hidden rounded-lg border border-slate-800">
+      <div className={`${heightClass} overflow-hidden rounded-lg border border-slate-800`}>
         <AgGridReact<Dispute>
           ref={gridRef}
           theme={theme}
@@ -195,9 +230,9 @@ export function DisputeGrid() {
           animateRows
           getRowId={(p) => p.data.id}
           onRowClicked={(e: RowClickedEvent<Dispute>) => {
-            if (e.data) router.push(`/disputes/${e.data.id}`);
+            if (e.data) router.push(`/cases/${e.data.id}`);
           }}
-          overlayNoRowsTemplate='<span style="color:#64748b;font-size:12px">No disputes match. Seed the demo data.</span>'
+          overlayNoRowsTemplate={`<span style="color:#64748b;font-size:12px">${emptyMessage}</span>`}
         />
       </div>
       <p className="mono mt-2 text-[10px] text-slate-600">

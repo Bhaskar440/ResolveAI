@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, or_, select
 
-from app.api.deps import SessionDep
-from app.core.errors import NotFoundError
+from app.api.deps import SessionDep, require_session
+from app.core.errors import NotFoundError, ValidationError
 from app.db.models import (
     AgentRun,
     Approval,
@@ -25,6 +26,7 @@ from app.schemas.responses import (
     DisputeDetail,
     DisputeList,
     DisputeOut,
+    MessageCreate,
     MessageOut,
     OrderOut,
     PolicyEvalOut,
@@ -215,7 +217,48 @@ async def get_dispute(dispute_id: UUID, session: SessionDep) -> DisputeDetail:
     )
 
 
-@router.post("/{dispute_id}/run", response_model=RunOut)
+@router.post(
+    "/{dispute_id}/messages",
+    response_model=MessageOut,
+    status_code=201,
+    dependencies=[Depends(require_session)],
+)
+async def add_case_message(
+    dispute_id: UUID, body: MessageCreate, session: SessionDep
+) -> MessageOut:
+    """Persist a merchant note on the complaint thread.
+
+    This is deliberately not presented as a PayPal message: the outbound PayPal
+    messaging API is not wired in this build. The note is part of the case file
+    and is available to the next agent run.
+    """
+    dispute = (
+        await session.execute(select(Dispute).where(Dispute.id == dispute_id))
+    ).scalar_one_or_none()
+    if dispute is None:
+        raise NotFoundError(f"Dispute {dispute_id} does not exist.")
+    text = body.body.strip()
+    if not text:
+        raise ValidationError("A merchant note cannot be empty.")
+    message = DisputeMessage(
+        dispute_id=dispute.id,
+        direction="outbound",
+        channel="case_file",
+        author_type="merchant",
+        body=text,
+        sent_at=datetime.now(UTC),
+    )
+    session.add(message)
+    await session.commit()
+    await session.refresh(message)
+    return MessageOut.model_validate(message)
+
+
+@router.post(
+    "/{dispute_id}/run",
+    response_model=RunOut,
+    dependencies=[Depends(require_session)],
+)
 async def start_run(dispute_id: UUID, session: SessionDep) -> RunOut:
     run = await run_dispute(session, dispute_id, trigger="manual")
     return RunOut.model_validate(run)

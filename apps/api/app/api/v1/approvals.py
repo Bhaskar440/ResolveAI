@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Query
 from sqlalchemy import select
 
-from app.api.deps import SessionDep
+from app.api.deps import CurrentUserDep, SessionDep
 from app.core.errors import NotFoundError
 from app.db.models import Approval, Decision, Dispute
 from app.schemas.responses import ApprovalDecision, ApprovalOut
@@ -50,10 +50,10 @@ async def decide(
     approval_id: UUID,
     body: ApprovalDecision,
     session: SessionDep,
-    x_operator: str | None = Header(default=None, alias="X-Operator"),
+    user: CurrentUserDep,
 ) -> ApprovalOut:
     approval = await decide_approval(
-        session, approval_id, approve=body.approve, note=body.note, user_id=None
+        session, approval_id, approve=body.approve, note=body.note, user_id=user.id
     )
     decision = (
         await session.execute(select(Decision).where(Decision.id == approval.decision_id))
@@ -63,5 +63,4 @@ async def decide(
     ).scalar_one_or_none()
     if dispute is None:
         raise NotFoundError("Dispute for this approval no longer exists.")
-    out = _out(approval, decision, dispute)
-    return out.model_copy(update={"note": approval.note or (f"operator:{x_operator}" if x_operator else None)})
+    return _out(approval, decision, dispute)

@@ -7,9 +7,9 @@ asks PayPal for the order status first and refuses to capture an unapproved orde
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, require_session
 from app.core.config import get_settings
 from app.core.errors import AppError, NotFoundError
 from app.paypal.base import NormalizedCapture, NormalizedOrder, PayPalError
@@ -21,7 +21,9 @@ from app.schemas.payments import (
 )
 from app.services import payments
 
-router = APIRouter(prefix="/payments", tags=["payments"])
+router = APIRouter(
+    prefix="/payments", tags=["payments"], dependencies=[Depends(require_session)]
+)
 settings = get_settings()
 
 

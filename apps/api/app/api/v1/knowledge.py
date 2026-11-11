@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, require_session
 from app.core.errors import AppError
+from app.db.models import KnowledgeDocument
 from app.services.knowledge import (
     KnowledgeIngestError,
     ingest_knowledge,
@@ -35,7 +37,38 @@ async def status(session: SessionDep) -> dict[str, Any]:
     return await knowledge_status(session)
 
 
-@router.post("/ingest")
+@router.get("/documents")
+async def documents(session: SessionDep) -> dict[str, Any]:
+    rows = (
+        (
+            await session.execute(
+                select(KnowledgeDocument).order_by(
+                    KnowledgeDocument.category.asc(), KnowledgeDocument.title.asc()
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "total": len(rows),
+        "documents": [
+            {
+                "id": str(doc.id),
+                "title": doc.title,
+                "source_key": doc.source_key,
+                "category": doc.category,
+                "version": doc.version,
+                "chunk_count": doc.chunk_count,
+                "embedding_model": doc.embedding_model,
+                "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
+            }
+            for doc in rows
+        ],
+    }
+
+
+@router.post("/ingest", dependencies=[Depends(require_session)])
 async def ingest(session: SessionDep, body: IngestRequest | None = None) -> dict[str, Any]:
     request = body or IngestRequest()
     try:
@@ -48,7 +81,7 @@ async def ingest(session: SessionDep, body: IngestRequest | None = None) -> dict
         ) from exc
 
 
-@router.post("/search")
+@router.post("/search", dependencies=[Depends(require_session)])
 async def search(session: SessionDep, body: SearchRequest) -> dict[str, Any]:
     case = {
         "reason_code": body.reason_code or "",

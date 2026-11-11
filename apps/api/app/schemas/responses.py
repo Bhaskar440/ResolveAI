@@ -92,9 +92,40 @@ class MessageOut(BaseModel):
 
     id: UUID
     direction: str
+    channel: str = "paypal"
     author_type: str
     body: str
     sent_at: datetime | None = None
+    created_at: datetime | None = None
+
+
+class MessageCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class ComplaintOut(BaseModel):
+    dispute_id: UUID
+    paypal_case_number: str | None = None
+    paypal_dispute_id: str
+    buyer_label: str | None = None
+    reason_code: str
+    reason_detail: str | None = None
+    status: str
+    amount: Decimal
+    currency: str
+    response_due_by: datetime | None = None
+    created_at: datetime
+    message_count: int = 0
+    last_message: str | None = None
+    last_message_at: datetime | None = None
+    last_message_direction: str | None = None
+
+
+class ComplaintList(BaseModel):
+    items: list[ComplaintOut]
+    total: int
+    limit: int
+    offset: int
 
 
 class RunOut(BaseModel):
@@ -252,3 +283,71 @@ class ApprovalDecision(BaseModel):
     approve: bool
     note: str | None = Field(default=None, max_length=500)
     edited_amount: Decimal | None = Field(default=None, ge=0)
+
+
+class StatusCount(BaseModel):
+    status: str
+    count: int
+
+
+class ReasonBreakdown(BaseModel):
+    reason_code: str
+    count: int
+    at_risk: Decimal
+    resolved: int
+    refunded: Decimal
+
+
+class RefundSummary(BaseModel):
+    count: int
+    completed: int
+    pending: int
+    failed: int
+    simulated: int
+    live: int
+    amount_total: Decimal
+    amount_completed: Decimal
+    amount_simulated: Decimal
+
+
+class TrendPoint(BaseModel):
+    date: str
+    created: int
+    resolved: int
+
+
+class Analytics(BaseModel):
+    total_disputes: int
+    resolved_cases: int
+    pending_cases: int
+    escalated_cases: int
+    awaiting_approval: int
+    resolution_rate: float
+    total_at_risk: Decimal
+    refunded_total: Decimal
+    by_status: list[StatusCount]
+    by_reason: list[ReasonBreakdown]
+    refunds: RefundSummary
+    trend: list[TrendPoint]
+    median_run_seconds: float | None = None
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class SessionUser(BaseModel):
+    id: UUID
+    email: str
+    display_name: str
+    role: str
+    merchant_id: UUID
+    merchant_name: str
+    merchant_slug: str
+
+
+class SessionOut(BaseModel):
+    user: SessionUser
+    expires_at: datetime
+    mode: str

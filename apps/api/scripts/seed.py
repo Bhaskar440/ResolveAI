@@ -16,17 +16,20 @@ from sqlalchemy import func, select
 from app.db.models import Dispute
 from app.db.session import SessionLocal
 from app.paypal.factory import get_adapter
+from app.services.auth import ensure_demo_user
 from app.services.ingestion import get_or_create_merchant, sync_all
 
 
 async def main() -> None:
     async with SessionLocal() as session:
         merchant = await get_or_create_merchant(session)
+        user = await ensure_demo_user(session)
         before = (await session.execute(select(func.count()).select_from(Dispute))).scalar_one()
         disputes = await sync_all(session)
         after = (await session.execute(select(func.count()).select_from(Dispute))).scalar_one()
         adapter = get_adapter()
         print(f"merchant: {merchant.slug} ({merchant.id})")
+        print(f"login: {user.email} (role={user.role})")
         print(f"mode: {adapter.mode}")
         print(f"disputes ingested: {len(disputes)} (total rows {before} -> {after})")
         for d in disputes:

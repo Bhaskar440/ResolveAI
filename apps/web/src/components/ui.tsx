@@ -63,6 +63,11 @@ const REASON_LABEL: Record<string, string> = {
   INCORRECT_AMOUNT: "Incorrect amount",
 };
 
+export function reasonLabel(reason: string | null | undefined) {
+  if (!reason) return "Unknown reason";
+  return REASON_LABEL[reason] ?? reason.replaceAll("_", " ").toLowerCase();
+}
+
 const REASON_STYLE: Record<string, string> = {
   MERCHANDISE_OR_SERVICE_NOT_RECEIVED: "border-sky-900 bg-sky-950/40 text-sky-300",
   MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED: "border-violet-900 bg-violet-950/40 text-violet-300",
@@ -118,4 +123,113 @@ export function AgentDot({ agent }: { agent: string }) {
     system: "bg-slate-500",
   };
   return <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${tone[agent] ?? "bg-slate-500"}`} />;
+}
+
+export function PageHeader({
+  eyebrow,
+  title,
+  description,
+  actions,
+}: {
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <header className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-slate-800/70 pb-5">
+      <div className="min-w-0">
+        {eyebrow && (
+          <p className="mono text-[9px] uppercase tracking-[0.2em] text-emerald-400/80">{eyebrow}</p>
+        )}
+        <h1 className="mt-1.5 text-[26px] font-semibold tracking-[-0.02em] text-slate-50 sm:text-[30px]">
+          {title}
+        </h1>
+        {description && (
+          <p className="mt-2 max-w-3xl text-[12.5px] leading-relaxed text-slate-400">{description}</p>
+        )}
+      </div>
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    </header>
+  );
+}
+
+export function Panel({
+  title,
+  subtitle,
+  right,
+  children,
+  className = "",
+}: {
+  title?: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`card rounded-xl ${className}`}>
+      {(title || right) && (
+        <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-800/70 px-4 py-3 sm:px-5">
+          <div>
+            {title && <h2 className="text-[13px] font-medium text-slate-200">{title}</h2>}
+            {subtitle && <p className="mono mt-0.5 text-[9px] uppercase tracking-wider text-slate-600">{subtitle}</p>}
+          </div>
+          {right}
+        </div>
+      )}
+      <div className="p-4 sm:p-5">{children}</div>
+    </section>
+  );
+}
+
+export function EmptyState({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900/20 px-5 py-10 text-center">
+      <p className="text-[13px] font-medium text-slate-300">{title}</p>
+      <p className="mx-auto mt-1.5 max-w-md text-[11.5px] leading-relaxed text-slate-500">{description}</p>
+      {action && <div className="mt-4 flex justify-center">{action}</div>}
+    </div>
+  );
+}
+
+export function Meter({
+  value,
+  max,
+  tone = "emerald",
+}: {
+  value: number;
+  max: number;
+  tone?: "emerald" | "amber" | "rose" | "sky" | "violet";
+}) {
+  const width = max <= 0 ? 0 : Math.min(100, Math.round((value / max) * 100));
+  const colors = {
+    emerald: "bg-emerald-400",
+    amber: "bg-amber-400",
+    rose: "bg-rose-400",
+    sky: "bg-sky-400",
+    violet: "bg-violet-400",
+  };
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+      <div className={`h-full rounded-full ${colors[tone]}`} style={{ width: `${width}%` }} />
+    </div>
+  );
+}
+
+export function LabelValue({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-[9px] uppercase tracking-[0.12em] text-slate-500">{label}</dt>
+      <dd className="mono mt-0.5 text-[11.5px] text-slate-200">{children || "—"}</dd>
+    </div>
+  );
 }

@@ -4,6 +4,8 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     approvals,
+    auth,
+    complaints,
     demo,
     disputes,
     knowledge,
@@ -16,7 +18,9 @@ from app.api.v1 import (
 )
 
 api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(auth.router)
 api_router.include_router(system.router, prefix="/system")
+api_router.include_router(complaints.router)
 api_router.include_router(policy.router)
 api_router.include_router(disputes.router)
 api_router.include_router(runs.router)

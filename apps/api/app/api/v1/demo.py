@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy import delete, func, select
 
-from app.api.deps import SessionDep
+from app.api.deps import SessionDep, require_session
 from app.core.config import get_settings
 from app.core.errors import NotFoundError
 from app.db.models import (
@@ -30,10 +30,11 @@ from app.db.models import (
 from app.paypal.factory import get_adapter
 from app.paypal.replay import ReplayAdapter
 from app.schemas.responses import SeedResult
+from app.services.auth import ensure_demo_user
 from app.services.ingestion import get_or_create_merchant, sync_all
 from app.services.knowledge import ensure_knowledge_base
 
-router = APIRouter(prefix="/demo", tags=["demo"])
+router = APIRouter(prefix="/demo", tags=["demo"], dependencies=[Depends(require_session)])
 settings = get_settings()
 
 
@@ -47,6 +48,7 @@ async def seed(session: SessionDep) -> SeedResult:
     _guard()
     before = (await session.execute(select(func.count()).select_from(Dispute))).scalar_one()
     merchant = await get_or_create_merchant(session)
+    await ensure_demo_user(session)
     disputes = await sync_all(session)
     knowledge = await ensure_knowledge_base(session)
     adapter = get_adapter()

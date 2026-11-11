@@ -164,6 +164,16 @@ export type PolicyEval = {
   created_at: string;
 };
 
+export type DisputeMessage = {
+  id: string;
+  direction: string;
+  channel: string;
+  author_type: string;
+  body: string;
+  sent_at: string | null;
+  created_at: string | null;
+};
+
 export type DisputeDetail = {
   dispute: Dispute;
   order: {
@@ -180,7 +190,7 @@ export type DisputeDetail = {
     currency: string;
     seller_protection_status: string;
   } | null;
-  messages: { id: string; direction: string; author_type: string; body: string; sent_at: string | null }[];
+  messages: DisputeMessage[];
   latest_run: Run | null;
   decision: Decision | null;
   policy: PolicyEval | null;
@@ -202,6 +212,121 @@ export type Metrics = {
   by_reason: Record<string, number>;
 };
 
+export type Complaint = {
+  dispute_id: string;
+  paypal_case_number: string | null;
+  paypal_dispute_id: string;
+  buyer_label: string | null;
+  reason_code: string;
+  reason_detail: string | null;
+  status: string;
+  amount: string;
+  currency: string;
+  response_due_by: string | null;
+  created_at: string;
+  message_count: number;
+  last_message: string | null;
+  last_message_at: string | null;
+  last_message_direction: string | null;
+};
+
+export type ComplaintList = {
+  items: Complaint[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type Analytics = {
+  total_disputes: number;
+  resolved_cases: number;
+  pending_cases: number;
+  escalated_cases: number;
+  awaiting_approval: number;
+  resolution_rate: number;
+  total_at_risk: string;
+  refunded_total: string;
+  by_status: { status: string; count: number }[];
+  by_reason: {
+    reason_code: string;
+    count: number;
+    at_risk: string;
+    resolved: number;
+    refunded: string;
+  }[];
+  refunds: {
+    count: number;
+    completed: number;
+    pending: number;
+    failed: number;
+    simulated: number;
+    live: number;
+    amount_total: string;
+    amount_completed: string;
+    amount_simulated: string;
+  };
+  trend: { date: string; created: number; resolved: number }[];
+  median_run_seconds: number | null;
+};
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  display_name: string;
+  role: string;
+  merchant_id: string;
+  merchant_name: string;
+  merchant_slug: string;
+};
+
+export type AuthSession = {
+  user: AuthUser;
+  expires_at: string;
+  mode: string;
+};
+
+export type KnowledgeStatus = {
+  ready: boolean;
+  pgvector_version: string | null;
+  documents: number;
+  chunks: number;
+  categories: { category: string; documents: number }[];
+  embedding_models: { model: string; chunks: number }[];
+  last_ingested_at: string | null;
+  settings: {
+    embedding_model: string;
+    dimensions: number;
+    top_k: number;
+    chunk_chars: number;
+    chunk_overlap: number;
+  };
+};
+
+export type KnowledgeDocument = {
+  id: string;
+  title: string;
+  source_key: string;
+  category: string;
+  version: string;
+  chunk_count: number;
+  embedding_model: string;
+  updated_at: string | null;
+};
+
+export type KnowledgeDocuments = { total: number; documents: KnowledgeDocument[] };
+
+export type KnowledgeSearch = {
+  citations: PolicyCitation[];
+  query: string;
+  mode: string;
+  embedding_model: string;
+  used_fallback: boolean;
+  warning: string | null;
+  latency_ms: number;
+};
+
+export const SESSION_COOKIE = "resolveai_session";
+
 export function apiBase(): string {
   const internal = process.env.API_INTERNAL_URL;
   const publicUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -218,6 +343,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     res = await fetch(url, {
       ...init,
       cache: "no-store",
+      credentials: "include",
       headers: { accept: "application/json", ...(init?.headers ?? {}) },
     });
   } catch (err) {
@@ -267,6 +393,7 @@ export const getDisputes = (params: {
   sort?: string;
   q?: string;
   status?: string;
+  reason?: string;
 } = {}) => {
   const search = new URLSearchParams();
   search.set("limit", String(params.limit ?? 25));
@@ -274,6 +401,7 @@ export const getDisputes = (params: {
   if (params.sort) search.set("sort", params.sort);
   if (params.q) search.set("q", params.q);
   if (params.status) search.set("status", params.status);
+  if (params.reason) search.set("reason", params.reason);
   return request<DisputeList>(`/api/v1/disputes?${search.toString()}`);
 };
 export const getDispute = (id: string) => request<DisputeDetail>(`/api/v1/disputes/${id}`);
@@ -290,3 +418,61 @@ export const decideApproval = (id: string, approve: boolean, note?: string) =>
   });
 export const seedDemo = () => request<{ disputes: number; mode: string }>("/api/v1/demo/seed", { method: "POST" });
 export const resetDemo = () => request<{ status: string }>("/api/v1/demo/reset", { method: "POST" });
+
+export const login = (email: string, password: string) =>
+  request<AuthSession>("/api/v1/auth/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+
+export const logout = () => request<{ status: string }>("/api/v1/auth/logout", { method: "POST" });
+
+export const getAuthSession = (token?: string) =>
+  request<AuthSession>("/api/v1/auth/session", {
+    headers: token ? { cookie: `${SESSION_COOKIE}=${token}` } : undefined,
+  });
+
+export const getComplaints = (params: {
+  q?: string;
+  status?: string;
+  reason?: string;
+  limit?: number;
+  offset?: number;
+} = {}) => {
+  const search = new URLSearchParams();
+  search.set("limit", String(params.limit ?? 100));
+  search.set("offset", String(params.offset ?? 0));
+  if (params.q) search.set("q", params.q);
+  if (params.status) search.set("status", params.status);
+  if (params.reason) search.set("reason", params.reason);
+  return request<ComplaintList>(`/api/v1/complaints?${search.toString()}`);
+};
+
+export const sendCaseMessage = (id: string, body: string) =>
+  request<DisputeMessage>(`/api/v1/disputes/${id}/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+
+export const getAnalytics = () => request<Analytics>("/api/v1/metrics/analytics");
+
+export const getKnowledgeStatus = () => request<KnowledgeStatus>("/api/v1/knowledge/status");
+
+export const getKnowledgeDocuments = () =>
+  request<KnowledgeDocuments>("/api/v1/knowledge/documents");
+
+export const searchKnowledge = (query: string, reason_code?: string, k = 5) =>
+  request<KnowledgeSearch>("/api/v1/knowledge/search", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ query, reason_code, k }),
+  });
+
+export const ingestKnowledge = (force = false) =>
+  request<Record<string, unknown>>("/api/v1/knowledge/ingest", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ force, allow_fallback: true }),
+  });
