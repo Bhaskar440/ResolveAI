@@ -95,6 +95,19 @@ export type AgentMessage = {
 
 export type RunDetail = { run: Run; steps: Step[]; messages: AgentMessage[] };
 
+export type PolicyCitation = {
+  chunk_id: string;
+  title: string;
+  text: string;
+  score: number;
+  source: string;
+  document: string;
+  section: string;
+  category: string;
+  retrieval_mode: string;
+  embedding_model: string;
+};
+
 export type Decision = {
   id: string;
   decision_code: string;
@@ -102,6 +115,9 @@ export type Decision = {
   currency: string;
   confidence: string | null;
   rationale: string | null;
+  reasoning: string | null;
+  missing_evidence: string[];
+  policy_citations: PolicyCitation[];
   cited_evidence: string[];
   requires_approval: boolean;
   status: string;

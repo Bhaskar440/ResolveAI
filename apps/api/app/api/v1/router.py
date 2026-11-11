@@ -6,6 +6,7 @@ from app.api.v1 import (
     approvals,
     demo,
     disputes,
+    knowledge,
     metrics,
     payments,
     policy,
@@ -23,4 +24,5 @@ api_router.include_router(approvals.router)
 api_router.include_router(metrics.router)
 api_router.include_router(payments.router)
 api_router.include_router(webhooks.router)
+api_router.include_router(knowledge.router)
 api_router.include_router(demo.router)

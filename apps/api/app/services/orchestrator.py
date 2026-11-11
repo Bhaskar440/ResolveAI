@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.contracts import PaymentPlan
@@ -28,9 +28,11 @@ from app.db.models import (
     Merchant,
     Order,
     PolicyEvaluation,
+    Refund,
 )
 from app.services.audit import append_audit
 from app.services.execution import execute_plan
+from app.services.knowledge import RetrievalResult, retrieve_policy_citations
 
 logger = logging.getLogger("resolveai.orchestrator")
 settings = get_settings()
@@ -60,6 +62,19 @@ async def load_case(session: AsyncSession, dispute: Dispute) -> dict:
         .all()
     )
     raw = dispute.raw or {}
+    order_raw = (order.raw or {}) if order else {}
+    tracking = order_raw.get("tracking") or raw.get("tracking")
+    shipping_raw = dict(order_raw.get("shipping") or raw.get("shipping") or {})
+    if tracking:
+        shipping_raw.setdefault("carrier", tracking.get("carrier"))
+        shipping_raw.setdefault(
+            "tracking_number", tracking.get("number") or tracking.get("tracking_number")
+        )
+        shipping_raw.setdefault("status", tracking.get("status"))
+    if shipping_raw:
+        shipping_raw["source"] = (
+            "orders.raw" if order_raw.get("tracking") or order_raw.get("shipping") else "disputes.raw"
+        )
     hours = None
     if dispute.response_due_by:
         delta = dispute.response_due_by - datetime.now(UTC)
@@ -84,6 +99,7 @@ async def load_case(session: AsyncSession, dispute: Dispute) -> dict:
             "item_title": order.item_title,
             "amount": str(money(order.amount)),
             "currency": order.currency,
+            "status": order.status,
         }
         if order
         else None,
@@ -91,11 +107,14 @@ async def load_case(session: AsyncSession, dispute: Dispute) -> dict:
             "paypal_capture_id": capture.paypal_capture_id,
             "seller_protection_status": capture.seller_protection_status,
             "refundable_amount": str(money(capture.amount)),
+            "amount": str(money(capture.amount)),
+            "currency": capture.currency,
             "status": capture.status,
         }
         if capture
         else None,
-        "tracking": raw.get("tracking"),
+        "tracking": tracking,
+        "shipping": shipping_raw or None,
         "risk_signals": raw.get("risk_signals") or [],
         "messages": [
             {
@@ -107,6 +126,51 @@ async def load_case(session: AsyncSession, dispute: Dispute) -> dict:
             for m in messages
         ],
     }
+
+
+async def _append_execution_step(
+    session: AsyncSession,
+    run_id: UUID | None,
+    refund: Refund | None,
+    plan: PaymentPlan,
+    *,
+    initiated_by: str,
+) -> None:
+    """Record the backend call and its verification result in the run trace."""
+    if run_id is None or refund is None:
+        return
+    max_seq = (
+        await session.execute(
+            select(func.max(AgentStep.seq)).where(AgentStep.run_id == run_id)
+        )
+    ).scalar() or 0
+    simulated = bool((refund.raw or {}).get("simulated"))
+    verified = bool(refund.paypal_refund_id) and refund.status.upper() in {"COMPLETED", "PENDING"}
+    session.add(
+        AgentStep(
+            run_id=run_id,
+            seq=max_seq + 1,
+            node="payment_backend",
+            agent="payment",
+            step_type="execution",
+            summary=(
+                f"PayPal refund {refund.status}"
+                + (" (simulated replay)" if simulated else " (live sandbox)")
+                + (" — verified" if verified else " — NOT verified")
+            ),
+            payload={
+                "plan_action": plan.action,
+                "plan_amount": str(plan.amount),
+                "capture": plan.capture_id,
+                "refund_id": refund.paypal_refund_id,
+                "refund_status": refund.status,
+                "simulated": simulated,
+                "verified": verified,
+                "initiated_by": initiated_by,
+                "backend_call": "executed_by_signed_plan_executor",
+            },
+        )
+    )
 
 
 def provisional_policy(case: dict) -> dict:
@@ -128,6 +192,18 @@ def provisional_policy(case: dict) -> dict:
     return result.to_dict()
 
 
+async def _retrieve_policies(session: AsyncSession, case: dict) -> RetrievalResult:
+    try:
+        return await retrieve_policy_citations(session, case)
+    except Exception as exc:  # noqa: BLE001 - knowledge failure must degrade to the ask branch, not crash
+        logger.warning("policy retrieval failed: %s", exc)
+        return RetrievalResult(
+            query="",
+            mode="none",
+            warning=f"Policy retrieval failed: {str(exc)[:300]}",
+        )
+
+
 async def run_dispute(
     session: AsyncSession, dispute_id: UUID, *, trigger: str = "manual"
 ) -> AgentRun:
@@ -143,6 +219,8 @@ async def run_dispute(
 
     case = await load_case(session, dispute)
     policy = provisional_policy(case)
+    retrieval = await _retrieve_policies(session, case)
+    policy_citations = [citation.model_dump(mode="json") for citation in retrieval.citations]
 
     run = AgentRun(
         id=uuid4(),
@@ -152,7 +230,7 @@ async def run_dispute(
         trigger=trigger,
         model_primary=settings.llm_model_fast or None,
         started_at=datetime.now(UTC),
-        graph_version="v1",
+        graph_version="v3",
     )
     session.add(run)
     prior_status = dispute.status
@@ -163,6 +241,8 @@ async def run_dispute(
         "run_id": str(run.id),
         "case": case,
         "policy": policy,
+        "policy_citations": policy_citations,
+        "policy_retrieval": retrieval.meta(),
         "rounds": 1,
         "steps": [],
         "messages": [],
@@ -183,6 +263,28 @@ async def run_dispute(
 
     steps = result.get("steps") or []
     messages = result.get("messages") or []
+    retrieval_label = (
+        "pgvector cosine" if retrieval.mode == "vector" else f"{retrieval.mode} fallback"
+    )
+    retrieval_summary = (
+        f"Retrieved {len(policy_citations)} policy clause(s) via {retrieval_label}"
+        if policy_citations
+        else f"No policy clause retrieved ({retrieval.mode})"
+    )
+    steps = [
+        {
+            "node": "knowledge_retrieval",
+            "agent": "system",
+            "step_type": "retrieval",
+            "summary": retrieval_summary,
+            "payload": {
+                **retrieval.meta(),
+                "citations": policy_citations,
+            },
+            "latency_ms": retrieval.latency_ms,
+        },
+        *steps,
+    ]
     for seq, step in enumerate(steps, start=1):
         session.add(
             AgentStep(
@@ -214,9 +316,30 @@ async def run_dispute(
         )
 
     run.iterations = int(result.get("rounds", 1))
+    run.tool_calls = len(steps)
     run.output_tokens = sum(int(s.get("tokens") or 0) for s in steps)
     run.cost_usd = Decimal("0.0000")
     run.ended_at = datetime.now(UTC)
+
+    # Missing information is a terminal, honest outcome: ask, do not guess and
+    # do not move money. The case can be re-run after the buyer answers.
+    if result.get("needs_information"):
+        questions = result.get("requested_info") or []
+        run.status = "NEEDS_INFO"
+        dispute.status = "AWAITING_INFO"
+        dispute.agent_summary = ("Missing information: " + "; ".join(questions))[:1000]
+        await append_audit(
+            session,
+            merchant_id=dispute.merchant_id,
+            actor_type="agent",
+            action="information.requested",
+            entity_type="dispute",
+            entity_id=str(dispute.id),
+            after={"questions": questions, "run_id": str(run.id)},
+        )
+        await session.commit()
+        await session.refresh(run)
+        return run
 
     final_policy = (result.get("policy") or {}).get("final") or {}
     decision_data = result.get("decision") or {}
@@ -224,6 +347,7 @@ async def run_dispute(
     amount = money(decision_data.get("amount"))
     confidence = float(decision_data.get("confidence") or 0)
     requires_approval = bool(decision_data.get("requires_approval"))
+    decision_citations = decision_data.get("policy_citations") or policy_citations
 
     pre = result.get("policy") or policy
     policy_eval = PolicyEvaluation(
@@ -248,7 +372,20 @@ async def run_dispute(
         ),
         result=str(final_policy.get("decision", "unknown")),
         matched_rules=final_policy.get("matched_rules") or [],
-        envelope={"pre": pre, "final": final_policy},
+        envelope={
+            "pre": pre,
+            "final": final_policy,
+            "agent": {
+                "reasoning": decision_data.get("reasoning"),
+                "missing_evidence": decision_data.get("missing_evidence") or [],
+                "rejected_alternatives": decision_data.get("rejected_alternatives") or [],
+                "buyer_intake": result.get("buyer_intake"),
+                "merchant_evidence": result.get("merchant_evidence"),
+                "payment_preflight": result.get("payment_preflight"),
+                "policy_citations": decision_citations,
+                "policy_retrieval": result.get("policy_retrieval") or retrieval.meta(),
+            },
+        },
     )
     session.add(policy_eval)
     await session.flush()
@@ -261,6 +398,9 @@ async def run_dispute(
         currency=case["currency"],
         confidence=Decimal(str(round(confidence, 3))),
         rationale=decision_data.get("rationale"),
+        reasoning=decision_data.get("reasoning"),
+        missing_evidence=decision_data.get("missing_evidence") or [],
+        policy_citations=decision_citations,
         cited_evidence=decision_data.get("evidence_refs") or [],
         policy_eval_id=policy_eval.id,
         requires_approval=requires_approval,
@@ -301,8 +441,11 @@ async def run_dispute(
                 after={"action": action, "amount": str(amount), "approval_id": str(approval.id)},
             )
         else:
-            await execute_plan(
+            refund = await execute_plan(
                 session, plan=plan, dispute=dispute, decision=decision, initiated_by="agent"
+            )
+            await _append_execution_step(
+                session, run.id, refund, plan, initiated_by="agent"
             )
             run.status = "COMPLETED"
             decision.status = "executed"
@@ -373,13 +516,20 @@ async def decide_approval(
             dispute.status = "ESCALATED"
             decision.status = "recorded"
         else:
-            await execute_plan(
+            refund = await execute_plan(
                 session,
                 plan=plan,
                 dispute=dispute,
                 decision=decision,
                 initiated_by="human",
                 actor_id=str(user_id) if user_id else None,
+            )
+            await _append_execution_step(
+                session,
+                approval.requested_by_run_id,
+                refund,
+                plan,
+                initiated_by="human",
             )
             decision.status = "executed"
     else:

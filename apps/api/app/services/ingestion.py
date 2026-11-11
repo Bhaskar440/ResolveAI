@@ -82,7 +82,10 @@ async def ingest_dispute(
                 else payload.buyer_email_hash,
                 buyer_label=payload.buyer_label,
                 item_title=payload.order.item_title,
-                raw={},
+                raw={
+                    "tracking": payload.tracking,
+                    "shipping": (payload.raw or {}).get("shipping"),
+                },
             )
             session.add(order_row)
             await session.flush()
@@ -105,6 +108,10 @@ async def ingest_dispute(
                     amount=payload.amount,
                     currency=payload.currency,
                     buyer_label=payload.buyer_label,
+                    raw={
+                        "tracking": payload.tracking,
+                        "shipping": (payload.raw or {}).get("shipping"),
+                    },
                 )
                 session.add(order_row)
                 await session.flush()

@@ -31,6 +31,7 @@ from app.paypal.factory import get_adapter
 from app.paypal.replay import ReplayAdapter
 from app.schemas.responses import SeedResult
 from app.services.ingestion import get_or_create_merchant, sync_all
+from app.services.knowledge import ensure_knowledge_base
 
 router = APIRouter(prefix="/demo", tags=["demo"])
 settings = get_settings()
@@ -47,6 +48,7 @@ async def seed(session: SessionDep) -> SeedResult:
     before = (await session.execute(select(func.count()).select_from(Dispute))).scalar_one()
     merchant = await get_or_create_merchant(session)
     disputes = await sync_all(session)
+    knowledge = await ensure_knowledge_base(session)
     adapter = get_adapter()
     return SeedResult(
         merchant=merchant.slug,
@@ -54,6 +56,7 @@ async def seed(session: SessionDep) -> SeedResult:
         mode=adapter.mode,
         created=(await session.execute(select(func.count()).select_from(Dispute))).scalar_one()
         > before,
+        knowledge=knowledge,
     )
 
 

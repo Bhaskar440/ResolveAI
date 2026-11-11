@@ -13,6 +13,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -299,6 +300,43 @@ class PolicyEvaluation(Base):
     )
 
 
+class KnowledgeDocument(Base, TimestampMixin):
+    __tablename__ = "knowledge_documents"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    source_key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    version: Mapped[str] = mapped_column(String(32), default="1", nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    embedding_model: Mapped[str] = mapped_column(String(80), nullable=False)
+
+
+class KnowledgeChunk(Base):
+    __tablename__ = "knowledge_chunks"
+    __table_args__ = (
+        UniqueConstraint("document_id", "chunk_index", name="uq_knowledge_chunk_document_index"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    section_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    citation_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(768), nullable=False)
+    embedding_model: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class Decision(Base):
     __tablename__ = "decisions"
 
@@ -312,6 +350,9 @@ class Decision(Base):
     currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
     confidence: Mapped[Decimal | None] = mapped_column(Numeric(4, 3))
     rationale: Mapped[str | None] = mapped_column(Text)
+    reasoning: Mapped[str | None] = mapped_column(Text)
+    missing_evidence: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    policy_citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
     cited_evidence: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     policy_eval_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("policy_evaluations.id"))
     requires_approval: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

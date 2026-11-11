@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -158,6 +159,9 @@ class DecisionOut(BaseModel):
     currency: str
     confidence: Decimal | None = None
     rationale: str | None = None
+    reasoning: str | None = None
+    missing_evidence: list[str] = Field(default_factory=list)
+    policy_citations: list[dict[str, Any]] = Field(default_factory=list)
     cited_evidence: list[str] = Field(default_factory=list)
     requires_approval: bool
     status: str
@@ -241,6 +245,7 @@ class SeedResult(BaseModel):
     disputes: int
     mode: str
     created: bool
+    knowledge: dict[str, Any] | None = None
 
 
 class ApprovalDecision(BaseModel):

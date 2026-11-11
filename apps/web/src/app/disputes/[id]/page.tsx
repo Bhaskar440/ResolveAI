@@ -411,6 +411,38 @@ export default async function DisputePage({ params }: { params: Promise<{ id: st
                   <p className="mt-3 text-[12px] leading-relaxed text-slate-400">
                     {decision.rationale}
                   </p>
+                  {decision.policy_citations.length > 0 && (
+                    <div className="mt-3 border-t border-slate-800 pt-3">
+                      <p className="mono text-[9px] uppercase tracking-wider text-slate-500">
+                        policy citations
+                      </p>
+                      <ul className="mt-2 space-y-2">
+                        {decision.policy_citations.map((citation) => (
+                          <li key={citation.chunk_id}>
+                            <p className="text-[11px] font-medium text-slate-300">
+                              {citation.document} · {citation.section}
+                            </p>
+                            <p className="mono mt-0.5 text-[9px] text-slate-600">
+                              {citation.source} · {citation.chunk_id} · score{" "}
+                              {citation.score.toFixed(3)} · {citation.retrieval_mode}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {decision.missing_evidence.length > 0 && (
+                    <div className="mt-3 border-t border-slate-800 pt-3">
+                      <p className="mono text-[9px] uppercase tracking-wider text-amber-500/80">
+                        evidence still missing
+                      </p>
+                      <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[11px] text-slate-400">
+                        {decision.missing_evidence.map((gap) => (
+                          <li key={gap}>{gap}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {decision.cited_evidence.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-1 border-t border-slate-800 pt-3">
                       {decision.cited_evidence.slice(0, 8).map((ref) => (

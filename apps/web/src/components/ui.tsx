@@ -37,9 +37,11 @@ export function relative(iso: string | null | undefined) {
 const STATUS_STYLES: Record<string, string> = {
   RECEIVED: "border-slate-700 bg-slate-900 text-slate-300",
   ANALYZING: "border-sky-800 bg-sky-950/60 text-sky-300",
+  AWAITING_INFO: "border-violet-800 bg-violet-950/60 text-violet-300",
   AWAITING_APPROVAL: "border-amber-800 bg-amber-950/60 text-amber-300",
   RESOLVED: "border-emerald-800 bg-emerald-950/60 text-emerald-300",
   ESCALATED: "border-rose-800 bg-rose-950/60 text-rose-300",
+  REFUND_PENDING: "border-amber-800 bg-amber-950/60 text-amber-300",
   FAILED: "border-rose-800 bg-rose-950/60 text-rose-300",
 };
 

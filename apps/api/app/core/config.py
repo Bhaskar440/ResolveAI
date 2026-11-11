@@ -69,6 +69,17 @@ class Settings(BaseSettings):
     paypal_webhook_id: str = ""
     paypal_webhook_verify: bool = True
 
+    # agents
+    agent_max_negotiation_rounds: int = 2
+    agent_max_tool_calls: int = 12
+
+    # knowledge / RAG
+    knowledge_embedding_model: str = "gemini-embedding-001"
+    knowledge_embedding_dimensions: int = 768
+    knowledge_top_k: int = 6
+    knowledge_chunk_chars: int = 1400
+    knowledge_chunk_overlap: int = 150
+
     # llm
     llm_provider: str = ""
     llm_api_key: str = ""

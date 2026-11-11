@@ -75,7 +75,7 @@ exists, whether anything is deployed.
 | A-10 | PayPal adapter: `replay` (fixtures, zero credentials) + `sandbox` (live REST) behind one Protocol | **COMPLETED** | `app/paypal/`, §7 V25–V26 |
 | A-11 | Policy engine + `rules.yaml` + unit tests (pure, no LLM) | **COMPLETED** — 28 tests green | §7 V10, V31, V33 |
 | A-12 | Next.js dashboard: AG Grid infinite model, approvals, trace, honest mode badge | **COMPLETED** | §7 V29–V31 |
-| A-13 | LangGraph spine: Buyer ∥ Merchant → Resolution → policy gate → Payment, bounded 2 rounds | **COMPLETED** | §7 V26–V28 |
+| A-13 | LangGraph spine: Buyer intake → Buyer ∥ Merchant → join → Resolution → policy gate → Payment | **COMPLETED** | §7 V26–V28, V36 |
 | A-14 | Signed-plan executor with idempotent refunds + hash-chained audit log | **COMPLETED** | §7 V26–V27 |
 | A-15 | Approval workflow persisted in Postgres (survives restarts), approve/reject API | **COMPLETED** | §7 V27 |
 | A-16 | Webhooks: signature verification + delivery dedupe (live path gated to sandbox mode) | **COMPLETED (replay-safe)** | `app/api/v1/webhooks.py` |
@@ -83,6 +83,43 @@ exists, whether anything is deployed.
 | A-18 | Order + capture + refund rows stored in PostgreSQL (idempotent on PayPal ids) | **COMPLETED** | 5 orders / 4 captures in DB after probe, V34 |
 | A-19 | Full + partial refunds with post-refund status verification | **COMPLETED (replay)** / live `WAITING FOR ME` | `app/services/execution.py`, V33 |
 | A-20 | Webhook capture/refund event persistence + replay-honest signature flag | **COMPLETED** | `app/api/v1/webhooks.py` |
+| A-21 | Buyer intake: extract transaction id, reason, requested resolution, missing information | **COMPLETED** | `buyer_intake` node; `BuyerIntake` contract; V36 |
+| A-22 | Missing-information branch asks a QUESTION and stops without a decision | **COMPLETED** | `join → request_info → END`; dispute status `AWAITING_INFO`; V36 |
+| A-23 | Merchant evidence: PostgreSQL order/shipping + policy RAG citations | **COMPLETED** | `app/services/knowledge.py`, `app/agents/rag.py`, five policy docs in `knowledge/`; `MerchantEvidence`; V36/V37 |
+| A-24 | Resolution output includes reasoning, missing evidence and rejected alternatives | **COMPLETED** | `AgentDecision` + `decisions.reasoning/missing_evidence`; V36/V37 |
+| A-25 | Payment preflight: authorization, capture, currency, refundable amount, approval | **COMPLETED** | `PaymentPreflight`; no credentials reachable by the LLM; V36 |
+| A-26 | Bounded retries (LangGraph `RetryPolicy`) + deterministic fallback on every LLM path | **COMPLETED** | graph node retry policy; fallback labels in trace; V36 |
+| A-27 | PostgreSQL + pgvector knowledge base, Gemini embeddings, HNSW index | **COMPLETED** | `pgvector/pgvector:pg16`, `vector(768)`, 27 chunks / 5 docs, HNSW cosine index; V37 |
+| A-28 | Idempotent ingestion, status/search API, CLI, source-attributed citations | **COMPLETED** | `POST /api/v1/knowledge/ingest`, `GET /status`, `POST /search`; `scripts/ingest_knowledge.py`; V37 |
+| A-29 | Insufficient-evidence branch asks for information instead of deciding | **COMPLETED** | `join` requires a verified order/capture and at least one retrieved policy clause; `request_info` terminal branch; unit test |
+
+### 1e. Phase 3 — LangGraph multi-agent workflow (prompt requirements)
+
+| ID | Requirement | Status | Evidence / remaining step |
+|---|---|---|---|
+| P3-1 | Buyer Agent understands complaint, extracts transaction id + reason + requested resolution | **COMPLETED** | structured `BuyerIntake`; hallucinated transaction ids rejected |
+| P3-2 | Buyer Agent asks for missing information | **COMPLETED** | `QUESTION` message and `request_info` terminal branch; case marked `AWAITING_INFO` |
+| P3-3 | Merchant Agent retrieves order and shipping information from PostgreSQL | **COMPLETED** | `orders.raw` tracking/shipping persisted at ingestion and read by `load_case` |
+| P3-4 | Merchant Agent retrieves return/refund policies through RAG | **COMPLETED** | pgvector cosine retrieval over five policy documents (shipping/refund/return/replacement/resolution); stable `policy:<chunk_id>` citations; V37 |
+| P3-5 | Merchant Agent returns structured evidence | **COMPLETED** | `MerchantEvidence` stored in run step payload and exposed to Resolution |
+| P3-6 | Resolution Agent evaluates both sides, identifies missing evidence, explains recommendation, returns JSON with confidence/reasoning | **COMPLETED** | `AgentDecision.reasoning`, `missing_evidence`, `rejected_alternatives`; persisted in `agent_steps` and `policy_evaluations.envelope.agent` |
+| P3-7 | Payment Agent checks authorization and refund eligibility, calls the PayPal backend, verifies the result | **COMPLETED (replay)** / live `WAITING FOR ME` | deterministic preflight + signed plan; only the executor calls PayPal and verifies with `get_refund`; `payment_backend` execution step records the receipt. Live refund still blocked on buyer capture (P2-3/P2-5) |
+| P3-8 | LangGraph state management, conditional routing, retries, error handling, human approval | **COMPLETED** | additive `AgentState`, join + conditional branches, `RetryPolicy`, graph failure trace, DB approval flow |
+| P3-9 | LLM never accesses payment credentials or executes unrestricted financial operations | **COMPLETED** | LLM prompts contain case facts only; money movement requires a signed plan and the executor; unit test asserts no credential strings in payment state |
+
+### 1f. Phase 4 — Knowledge retrieval (PostgreSQL + pgvector)
+
+| ID | Requirement | Status | Evidence / remaining step |
+|---|---|---|---|
+| P4-1 | Knowledge base contains merchant refund, return, shipping/delivery, replacement and resolution policies | **COMPLETED** | Five markdown documents in `apps/api/app/agents/knowledge/`, each with category/version metadata and section tags |
+| P4-2 | Document ingestion + chunking | **COMPLETED** | Heading-aware chunker with 1,400-char windows / 150-char overlap; 5 docs → 27 chunks; idempotent by content hash |
+| P4-3 | Embeddings | **COMPLETED** | Gemini `gemini-embedding-001` at **768 dimensions**; batch embedding verified live (**200**, 27 vectors); labelled `hash-768` fallback only when the API is unavailable |
+| P4-4 | Vector retrieval | **COMPLETED** | PostgreSQL `vector(768)` + HNSW cosine index; query embedding + `<=>` ordering; live search latency ~1.3–1.6 s |
+| P4-5 | Source attribution + citations in the decision output | **COMPLETED** | `PolicyCitation` carries document, section, source file, chunk id, score, retrieval mode and embedding model; persisted in `decisions.policy_citations` and rendered on the case page |
+| P4-6 | Insufficient evidence → request information, never invent facts | **COMPLETED** | `join` blocks when no policy clause or no verified order/capture exists; `request_info` stops before Resolution/payment; unit test `test_insufficient_policy_evidence_routes_to_request_info` |
+| P4-7 | Ingestion/status/search API + CLI | **COMPLETED** | `GET /api/v1/knowledge/status`, `POST /api/v1/knowledge/ingest`, `POST /api/v1/knowledge/search`; `scripts/ingest_knowledge.py` |
+| P4-8 | Tests, lint, typecheck, build | **COMPLETED** | `uv run pytest -q` → **47 passed**; ruff has only pre-existing `BLE001` findings; `tsc --noEmit` and `next build` pass |
+| P4-9 | Live replay verification of citations | **COMPLETED** | V37: retrieval step says `Retrieved 6 policy clause(s) via pgvector cosine`; decisions expose real policy citations; replay refund remains clearly `simulated=true` |
 
 ### 1d. Phase 2 — PayPal integration (prompt requirements)
 
@@ -417,5 +454,7 @@ authorize Git/hosting OAuth · record the pitch video · submit on Devpost · ap
 | V34 | Live read + app-level order create + PostgreSQL persistence | `PAYPAL_MODE=sandbox uv run python -m scripts.verify_sandbox_adapter`; `... scripts.sandbox_probe_order`; API replay create/capture | OK 2026-11-10: live OAuth; `GET /v2/checkout/orders/{id}` for all 3 buyer orders returned **PAYER_ACTION_REQUIRED**, `payer=not approved`, no capture. App service created probe order `6AL6984323999660M` ($1.00, `PAYER_ACTION_REQUIRED`) and stored it in `orders` with `mode=sandbox`. Replay HTTP path create -> capture -> get capture worked end-to-end and was clearly `simulated=true`; DB then held **5 orders / 4 captures**. Webhook id still empty. **No capture or refund is claimed;** capture/refund remain blocked on buyer approval. |
 
 | V35 | Webhook endpoint stores, dedupes, and reports signature truthfully | `POST /api/v1/webhooks/paypal` (replay) twice with the same event | OK 2026-11-10: first call `stored`, second `duplicate`; delivery row records `signature_valid=false` (no PayPal signature was checked, so it must not claim true). In sandbox mode the route fails closed when `PAYPAL_WEBHOOK_ID` is empty. Live signed event still blocked on webhook registration + public URL (P2-7). |
+| V36 | Phase 3 four-agent workflow, RAG evidence, missing-info branch, payment preflight | `uv run pytest -q`; `POST /demo/reset` → `/demo/seed` → run all 3 replay disputes | OK 2026-11-10: **40 passed**. Live replay run trace shows `buyer_intake` (LLM), buyer + merchant fan-out, Merchant policy refs `policy:shipping-and-delivery` etc., Resolution `reasoning` + `missing_evidence` + `rejected_alternatives`, Policy allow/require_approval, Payment preflight checks, and a `payment_backend` execution step with `refund_id=REPLAY-RF-0613F0079945`, `status=COMPLETED`, `simulated=true`, `verified=true`. Final demo state: 91001 RESOLVED $40; 91002 AWAITING_APPROVAL OFFER_PARTIAL $50; 91003 ESCALATED DEFEND. No live PayPal write was performed. |
+| V37 | Prompt 4 — pgvector knowledge base, embeddings, retrieval, citations, sufficiency branch | `GET /api/v1/knowledge/status`; `POST /api/v1/knowledge/search`; `scripts/ingest_knowledge.py` twice; `POST /demo/reset` → seed → run 3 disputes; `uv run pytest -q`; `npm run typecheck`; `npm run build` | OK 2026-11-11: DB image `pgvector/pgvector:pg16`, extension **0.8.7**; **5 documents / 27 chunks**, embedding model **gemini-embedding-001**, all vectors 768-d; HNSW cosine index present. Ingestion is idempotent (second run skipped all 5 docs). Search returned 6 vector citations (top score 0.7821, `shipping-policy:delivery-proof`). Replay decisions persisted citations and reasoning: 91001 RESOLVED $40 with `refund-policy:full-refunds` + `shipping-policy:delivery-proof`, retrieval step `Retrieved 6 policy clause(s) via pgvector cosine`, refund `REPLAY-RF-0613F0079945` COMPLETED simulated=true; 91002 AWAITING_APPROVAL OFFER_PARTIAL $56 with damage/partial-refund citations; 91003 ESCALATED with `resolution-guidelines:unauthorised-payments-and-fraud` citation. **47 tests passed**, typecheck and Next build pass. No live PayPal write, capture, webhook signature or deployment is claimed. |
 
 *Nothing in this file is marked COMPLETED until the corresponding check above actually passes.*

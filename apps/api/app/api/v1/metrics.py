@@ -11,7 +11,7 @@ from app.schemas.responses import Metrics
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
-OPEN_STATES = ("RECEIVED", "ANALYZING", "AWAITING_APPROVAL", "REFUND_PENDING")
+OPEN_STATES = ("RECEIVED", "ANALYZING", "AWAITING_INFO", "AWAITING_APPROVAL", "REFUND_PENDING")
 
 
 @router.get("", response_model=Metrics)
