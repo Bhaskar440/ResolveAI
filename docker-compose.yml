@@ -19,7 +19,9 @@ services:
 
   api:
     build:
-      context: ./apps/api
+      # repo root so the image can include fixtures/disputes for replay mode
+      context: .
+      dockerfile: apps/api/Dockerfile
     container_name: resolveai-api
     env_file:
       - .env.local
@@ -56,6 +58,7 @@ services:
   web:
     build:
       context: ./apps/web
+      dockerfile: Dockerfile.dev
     container_name: resolveai-web
     environment:
       API_INTERNAL_URL: http://api:8000

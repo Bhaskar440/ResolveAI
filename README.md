@@ -10,6 +10,24 @@ human approval. Money only moves through a signed payment plan consumed by the e
 **Mode:** `replay` by default (fixtures, zero credentials, refunds explicitly marked
 `simulated`). `PAYPAL_MODE=sandbox` switches the same code path to the live PayPal REST API.
 
+## Live demo
+
+| | |
+|---|---|
+| **App** | `https://resolveai-web.onrender.com` *(replace after your Render deploy)* |
+| **API health** | `https://resolveai-api.onrender.com/health/ready` |
+| **Login** | `owner@northwind.example` / `resolveai-demo` |
+| **Mode** | `replay` — refunds are **simulated (replay)**, no real money moves |
+
+The public demo is provisioned from [`render.yaml`](render.yaml): Next.js web
+service, FastAPI API service, and Render Postgres 16 with pgvector. The browser
+only talks to the Next.js origin; `/api/v1` is proxied to the API, so the session
+cookie is first-party. See [docs/13-deployment-render.md](docs/13-deployment-render.md)
+for the full runbook.
+
+> The deployment is prepared and locally verified. Creating the Render resources
+> requires your Render account authorization — the exact steps are in docs/13.
+
 ---
 
 ## What works end-to-end today
@@ -24,6 +42,7 @@ human approval. Money only moves through a signed payment plan consumed by the e
 | AG Grid 36 dashboard (infinite row model, server pagination) + case file + agent transcript | working |
 | Replay refunds | working, `simulated=true` in API and UI |
 | Live PayPal sandbox refund / webhook | adapter implemented; execution pending sandbox disputes (see [docs/09](docs/09-manual-actions-checklist.md)) |
+| Render deployment (web + API + Postgres) | Blueprint, production Dockerfiles, migration-on-boot, smoke test prepared; create the resources with your Render account ([docs/13](docs/13-deployment-render.md)) |
 
 Verified claims and exact commands are logged in
 [docs/09-manual-actions-checklist.md](docs/09-manual-actions-checklist.md) (V1-V31). Nothing here is
@@ -91,6 +110,37 @@ npm run dev
 
 Add `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `LLM_API_KEY` to `.env.local` for real model calls
 and the sandbox adapter. Secrets are git-ignored; `.env.example` documents every variable.
+
+### Deploy to Render
+
+1. Push the repo to a **public GitHub repository**.
+2. Render Dashboard → **New +** → **Blueprint** → select the repo.
+3. Render reads [`render.yaml`](render.yaml) and creates:
+   - `resolveai-web` — Next.js dashboard (Docker)
+   - `resolveai-api` — FastAPI + LangGraph (Docker, runs Alembic on boot)
+   - `resolveai-db` — Postgres 16 with pgvector
+4. Paste `LLM_API_KEY` when prompted. PayPal sandbox values are optional for the
+   replay-only demo.
+5. After the first deploy, verify:
+
+```bash
+python scripts/verify_deployment.py \
+  --web https://resolveai-web.onrender.com \
+  --api https://resolveai-api.onrender.com \
+  --seed
+```
+
+`APP_ENV=production` makes the API refuse to boot with missing/weak secrets.
+Render generates `SECRET_KEY`, `CREDENTIAL_KEK`, `PII_HASH_PEPPER`, and
+`PLAN_SIGNING_KEY` automatically. `DEMO_ENDPOINTS_ENABLED=true` keeps the
+session-guarded seed/reset controls available for the public demo; set it to
+`false` for a hardened deployment.
+
+**PayPal sandbox webhook:** after creating the sandbox app, add
+`https://<your-api-host>/api/v1/webhooks/paypal` in the PayPal Developer
+Dashboard, copy the webhook ID to `PAYPAL_WEBHOOK_ID`, and set
+`PAYPAL_MODE=sandbox`. Full steps and event types are in
+[docs/13-deployment-render.md](docs/13-deployment-render.md#6-paypal-sandbox--webhook).
 
 ## Architecture
 
@@ -162,8 +212,17 @@ Errors use one envelope: `{error:{code,message,details,request_id,retryable}}`, 
 curl http://localhost:8000/health/ready
 curl http://localhost:8000/api/v1/system/status
 curl http://localhost:8000/api/v1/metrics
-cd apps/api && uv run pytest -q          # 19 tests
-cd apps/web && npx tsc --noEmit && npm run build
+cd apps/api && uv run pytest -q          # 52 tests
+cd apps/web && npm run typecheck && npm run build
+
+# no credential in tracked files or git history
+python scripts/check_secrets.py --history
+
+# deployed stack: health, DB, policy, Next.js proxy, optional login + seed
+python scripts/verify_deployment.py \
+  --web https://resolveai-web.onrender.com \
+  --api https://resolveai-api.onrender.com \
+  --seed
 ```
 
 Credential checks without exposing secrets:
@@ -192,6 +251,30 @@ PAYPAL_MODE=sandbox uv run python -m scripts.verify_sandbox_adapter
 - The free-tier Gemini key can return `503` under load. Runs then use the labelled deterministic
   fallback rather than retrying forever.
 
+## Secrets and repository hygiene
+
+- Only `.env.example` is committed. `.env`, `.env.*`, keys, PEM files, and local
+  evidence are git-ignored.
+- `python scripts/check_secrets.py --history` fails if a credential pattern or a
+  value from `.env.local` appears in tracked files or git history.
+- Render generates the four app-internal secrets (`SECRET_KEY`, `CREDENTIAL_KEK`,
+  `PII_HASH_PEPPER`, `PLAN_SIGNING_KEY`) and stores them outside Git.
+- PayPal and Gemini credentials are entered in the Render dashboard
+  (`sync: false`), never in `render.yaml`.
+- `APP_ENV=production` fails closed on missing or weak secrets, and on
+  `PAYPAL_MODE=sandbox` without client credentials.
+- The public demo account is intentionally known (`owner@northwind.example` /
+  `resolveai-demo`) and runs in replay mode. It is not a production identity.
+
+## Submission
+
+- [docs/13-deployment-render.md](docs/13-deployment-render.md) — Render runbook,
+  Postgres/pgvector, PayPal sandbox + webhook, verification, troubleshooting.
+- [docs/11-demo-script.md](docs/11-demo-script.md) — three-minute video script.
+- [docs/14-submission-checklist.md](docs/14-submission-checklist.md) — Devpost
+  fields, final checks, screenshots, honest limits.
+- [LICENSE](LICENSE) — MIT.
+
 ## Layout
 
 ```
@@ -207,8 +290,12 @@ apps/web/src/
   app/            dashboard + /disputes/[id] case file
   components/     AG Grid, actions, demo controls, UI primitives
   lib/api.ts      typed client, no fabricated fallbacks
-docs/             architecture, schema, API, agents, PayPal, security, operations
+scripts/          verify_deployment.py, check_secrets.py
+docs/             architecture, schema, API, agents, PayPal, security, operations,
+                  Render deployment, demo script, submission checklist
 fixtures/         replay PayPal payloads (3 scenarios)
+render.yaml       Render Blueprint: web + API + Postgres
+docker-compose.yml local Postgres + API + web
 ```
 
 ## Documentation
@@ -218,7 +305,9 @@ fixtures/         replay PayPal payloads (3 scenarios)
 [docs/04 agents](docs/04-agents.md),
 [docs/05 PayPal integration](docs/05-paypal-integration.md),
 [docs/09 verification log](docs/09-manual-actions-checklist.md),
-[docs/11 demo script](docs/11-demo-script.md).
+[docs/11 demo script](docs/11-demo-script.md),
+[docs/13 Render deployment](docs/13-deployment-render.md),
+[docs/14 submission checklist](docs/14-submission-checklist.md).
 
 ## License
 

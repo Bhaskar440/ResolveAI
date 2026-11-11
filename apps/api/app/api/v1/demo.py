@@ -1,4 +1,8 @@
-"""Demo helpers — seeding and reset. Disabled when APP_ENV=production."""
+"""Demo helpers — seeding and reset.
+
+Disabled in production unless DEMO_ENDPOINTS_ENABLED=true is set explicitly.
+Every route still requires a signed-in merchant session.
+"""
 
 from __future__ import annotations
 
@@ -39,8 +43,8 @@ settings = get_settings()
 
 
 def _guard() -> None:
-    if settings.app_env == "production":
-        raise NotFoundError("Demo endpoints are disabled in production.")
+    if not settings.demo_enabled:
+        raise NotFoundError("Demo endpoints are disabled in this environment.")
 
 
 @router.post("/seed", response_model=SeedResult)

@@ -17,7 +17,9 @@ depends on the manual steps M-03 / M-07 / M-08.
 | [08-environment-variables.md](08-environment-variables.md) | Full env var list with secret/optional flags |
 | [09-manual-actions-checklist.md](09-manual-actions-checklist.md) | Every action that needs you: accounts, credentials, approvals, status board, verification log |
 | [10-hackathon-compliance-and-48h-plan.md](10-hackathon-compliance-and-48h-plan.md) | **Binding rules, pass/fail requirements, hour-by-hour plan for the Nov 13 deadline** |
-| [11-demo-script.md](11-demo-script.md) | **Recording storyboard (<3 min), pre-record checklist, YouTube upload steps, claims checklist** |
+| [11-demo-script.md](11-demo-script.md) | **Three-minute demo storyboard for the public deployment, pre-record checklist, YouTube upload steps, claims checklist** |
+| [13-deployment-render.md](13-deployment-render.md) | **Render Blueprint, production env, Postgres + pgvector, PayPal sandbox webhook, verification, troubleshooting** |
+| [14-submission-checklist.md](14-submission-checklist.md) | **Devpost text, video/repo/license checks, final submission sequence** |
 
 ---
 

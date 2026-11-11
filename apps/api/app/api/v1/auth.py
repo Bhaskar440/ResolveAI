@@ -55,7 +55,7 @@ async def login(body: LoginRequest, response: Response, session: SessionDep) -> 
         max_age=int((expires_at - datetime.now(UTC)).total_seconds()),
         httponly=True,
         secure=settings.auth_cookie_secure or settings.app_env == "production",
-        samesite="lax",
+        samesite=settings.auth_cookie_samesite.lower(),
         path="/",
     )
     return _session_payload(user, merchant, expires_at)
@@ -97,7 +97,7 @@ async def logout(response: Response) -> dict[str, str]:
         settings.auth_cookie_name,
         path="/",
         httponly=True,
-        samesite="lax",
+        samesite=settings.auth_cookie_samesite.lower(),
         secure=settings.auth_cookie_secure or settings.app_env == "production",
     )
     return {"status": "signed_out"}

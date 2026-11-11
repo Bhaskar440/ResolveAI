@@ -327,13 +327,19 @@ export type KnowledgeSearch = {
 
 export const SESSION_COOKIE = "resolveai_session";
 
+function withScheme(value: string): string {
+  return /^https?:\/\//.test(value) ? value : `http://${value}`;
+}
+
 export function apiBase(): string {
   const internal = process.env.API_INTERNAL_URL;
   const publicUrl = process.env.NEXT_PUBLIC_API_URL;
-  // Server components run inside the compose network and must use the service
-  // name; the browser must use a URL that resolves from the host.
-  if (typeof window === "undefined" && internal) return internal;
-  return publicUrl ?? internal ?? "http://localhost:8000";
+  // Server components call the API directly. The browser uses a relative URL so
+  // the /api/v1 route handler proxies through this origin (first-party cookies).
+  if (typeof window === "undefined") {
+    return withScheme(internal ?? publicUrl ?? "http://localhost:8000");
+  }
+  return publicUrl ?? "";
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

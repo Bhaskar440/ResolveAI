@@ -24,7 +24,9 @@ Legend: **R** = required, **S** = secret (generate with `openssl rand -hex 32`),
 | `CREDENTIAL_KEK` | R **S** | — | KEK for envelope-encrypting PayPal client secrets. Rotating it requires re-encryption. |
 | `PII_HASH_PEPPER` | R **S** | — | For `buyer_email_hash`. Changing it invalidates buyer matching (acceptable in demo). |
 | `PLAN_SIGNING_KEY` | R **S** | — | HMAC key for `PaymentPlan` execution tokens. |
-| `CORS_ORIGINS` | O | `http://localhost:3000` | Comma-separated, no wildcards with credentials. |
+| `CORS_ORIGINS` | O | `http://localhost:3000` | Comma-separated, no wildcards with credentials. Not needed when the browser uses the Next.js proxy. |
+| `AUTH_COOKIE_SECURE` | O | `false` | Set `true` behind HTTPS (always true when `APP_ENV=production`). |
+| `AUTH_COOKIE_SAMESITE` | O | `lax` | `lax` \| `strict` \| `none`. `none` requires HTTPS and is only needed for cross-site API origins. |
 | `RATE_LIMIT_ENABLED` | O | `true` | |
 | `RATE_LIMIT_REDIS_URL` | O | — | If empty, in-memory limiter (single instance only). |
 
@@ -32,11 +34,12 @@ Legend: **R** = required, **S** = secret (generate with `openssl rand -hex 32`),
 
 | Var | Req | Default | Notes |
 |---|---|---|---|
-| `DATABASE_URL` | R | `postgresql+asyncpg://resolveai:resolveai@db:5432/resolveai` | Async driver for the app. |
-| `DATABASE_URL_SYNC` | O | derived | Alembic/psql. |
-| `DB_POOL_SIZE` | O | `10` | |
+| `DATABASE_URL` | R | `postgresql+asyncpg://resolveai:resolveai@db:5432/resolveai` | Async driver. `postgres://` / `postgresql://` and `?sslmode=require` from Render/Heroku are normalized on boot. |
+| `DB_POOL_SIZE` | O | `5` | Keep small on Render free Postgres. |
+| `DB_MAX_OVERFLOW` | O | `5` | |
+| `DB_POOL_RECYCLE_SECONDS` | O | `300` | Recycle before managed-provider idle timeouts. |
 | `DB_ECHO` | O | `false` | |
-| `PGVECTOR_ENABLED` | O | `false` | Enables embedding-based KB retrieval. |
+| `PGVECTOR_ENABLED` | O | `false` | Documents intent; the migration enables the `vector` extension on Render. |
 
 ## PayPal
 
@@ -110,7 +113,8 @@ Legend: **R** = required, **S** = secret (generate with `openssl rand -hex 32`),
 
 | Var | Req | Default | Notes |
 |---|---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | R | `http://localhost:8000/api/v1` | |
+| `API_INTERNAL_URL` | R (deployed) | `http://localhost:8000` | Server-side only. Next.js proxies `/api/v1/*` here and server components call it directly. On Render free plan, use the API's public HTTPS URL (`fromService.envVarKey: RENDER_EXTERNAL_URL`). Paid private networking can use `fromService.hostport`. |
+| `NEXT_PUBLIC_API_URL` | O | empty | Browser override. Leave empty so the browser uses the same-origin `/api/v1` proxy (first-party cookie). Set only when the API is on a different origin. |
 | `NEXT_PUBLIC_APP_NAME` | O | `ResolveAI` | |
 | `NEXT_PUBLIC_DEMO_MODE` | O | `true` | Shows the sandbox/replay badge and "reset demo" affordance. |
 | `NEXT_PUBLIC_SSE_URL` | O | derived | If the SSE origin differs from the API. |
@@ -127,7 +131,7 @@ Legend: **R** = required, **S** = secret (generate with `openssl rand -hex 32`),
 | `FEATURE_EVIDENCE_SUBMIT` | O | `true` | Toggle the PayPal evidence write. |
 | `ALLOW_ADMIN_RESET` | O | `true` (local/demo only) | Guards `POST /admin/reset-demo`. |
 | `DEMO_MERCHANT_SLUG` | O | `demo-store` | Seed target. |
-| `SEED_ON_START` | O | `true` (local) | Idempotent seed at boot. |
+| `DEMO_ENDPOINTS_ENABLED` | O | unset | Unset = on outside production, off in production. The public Render demo sets `true` explicitly; routes remain session-guarded. |
 
 ## Ops
 
@@ -148,9 +152,10 @@ SECRET_KEY=<32 bytes hex>
 CREDENTIAL_KEK=<32 bytes hex>
 PII_HASH_PEPPER=<32 bytes hex>
 PLAN_SIGNING_KEY=<32 bytes hex>
-LLM_PROVIDER=openai
+LLM_PROVIDER=google
 LLM_API_KEY=<key>
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
+API_INTERNAL_URL=http://localhost:8000
+# NEXT_PUBLIC_API_URL stays empty: the browser uses the Next.js /api/v1 proxy.
 ```
 Everything else has a safe default. Sandbox mode adds `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`,
 `PAYPAL_WEBHOOK_ID`, `PAYPAL_MERCHANT_ID`.
